@@ -54,7 +54,7 @@
     (cond
       ((null? state) 'undefined)
       ((null? (car state)) (error 'undefined "Attempting to assign an undefined variable."))
-      ((eq? name (caar state)) (cons (car state) (list (cons value (list (cdadr state))))))
+      ((eq? name (caar state)) (cons (car state) (list (cons value (cdadr state)))))
       (else ((lambda (newState)
               (cons (cons (caar state) (car newState)) (list (cons (caadr state) (cadr newState)))))
-             (update_state name value (cons (cdar state) (cadr state))))))))
+             (update_state name value (cons (cdar state) (list (cdadr state)))))))))
