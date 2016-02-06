@@ -1,18 +1,3 @@
-; Mvalue for +, -, *, /, %
-; ex Mvalue '(3 + 5)
-; (value '(3 + 5)) -> 8
-
-(define value
-  (lambda (expression)
-    (cond
-      ((number? expression) expression)
-      ((null? (cdr expression)) (value (car expression)))
-      ((eq? (cadr expression) '+) (+ (value (car expression)) (value (cddr expression))))
-      ((eq? (cadr expression) '-) (- (value (car expression)) (value (cddr expression))))
-      ((eq? (cadr expression) '*) (* (value (car expression)) (value (cddr expression))))
-      ((eq? (cadr expression) '/) (quotient (value (car expression)) (value (cddr expression))))
-      ((eq? (cadr expression) '%) (remainder (value (car expression)) (value (cddr expression)))))))
-
 (define M_value
         (lambda (expression)
           (cond
@@ -40,21 +25,33 @@
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
-      ((eq? name (caar state)) (caadr state))
-      (else (lookup name (cons (cdar state) (list (cdadr state))))))))
+      ((eq? name (first_variable state)) (first_value state))
+      (else (lookup name (cons (remaining_variables state) (list (remaining_values state))))))))
+
+(define variables car)
+
+(define first_variable caar)
+
+(define remaining_variables cdar)
+
+(define state_values cadr)
+
+(define first_value caadr)
+
+(define remaining_values cdadr)
 
 (define declare
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
-      (else (cons (cons name (car state)) (list (cons 'undefined (cadr state))))))))
+      (else (cons (cons name (variables state)) (list (cons 'undefined (state_values state))))))))
 
 (define update_state
   (lambda (name value state)
     (cond
       ((null? state) 'undefined)
       ((null? (car state)) (error 'undefined "Attempting to assign an undefined variable."))
-      ((eq? name (caar state)) (cons (car state) (list (cons value (cdadr state)))))
+      ((eq? name (first_variable state)) (cons (variables state) (list (cons value (remaining_values state)))))
       (else ((lambda (newState)
-              (cons (cons (caar state) (car newState)) (list (cons (caadr state) (cadr newState)))))
-             (update_state name value (cons (cdar state) (list (cdadr state)))))))))
+              (cons (cons (first_variable state) (variables newState)) (list (cons (first_value state) (state_values newState)))))
+             (update_state name value (cons (remaining_variables state) (list (remaining_values state)))))))))
