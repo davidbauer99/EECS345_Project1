@@ -57,17 +57,30 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;; M_state section ;;;;;;;;;;;;;;;;;;
 
+(define M_state
+  (lambda (statement state)
+    (cond
+      ((null? (car statement)) (error 'error "Empty statement."))
+      ((eq? 'var (car statement)) (M_state-declare statement state))
+      ((eq? '= (car statement)) (M_state-assign statement state))
+      ((eq? 'return (car statement)) (M_value-return statement state))
+      ((eq? 'if (car statement)) (M_state-if statement state))
+      ((eq? 'while (car statement)) (M_state-while statement state))
+      (else (error 'error "Unrecognized statement type.")))))
+
 (define M_state-while
-  (lambda (condition statement state)
-    (if (M_boolean condition state)
-        (M_state-while condition statement (M_state statement state))
+  (lambda (statement state)
+    (if (M_value-boolean (GetCondition statement) state)
+        (M_state-while statement (M_state (GetStatement statement) state))
         state)))
+
+(define GetStatement caddr)
 
 (define M_state-if
   (lambda (statement state)
     (if (M_value (GetCondition statement) state)
-        (M_state-if (GetThenStatement statement) state)
-        (M_state-if (GetOptElse statement) state))))
+        (M_state (GetThenStatement statement) state)
+        (M_state (GetOptElse statement) state))))
 
 ;Helper for if statement to get the first condition
 (define GetCondition cadr)
