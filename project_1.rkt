@@ -55,6 +55,8 @@
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
+      ((null? (car state)) (error 'error "Using a variable before declaring it."))
+      ((and (eq? name (first_variable state)) (eq? (first_value state) 'undefined)) (error 'error "Using variable before it is assigned."))
       ((eq? name (first_variable state)) (first_value state))
       (else (lookup name (cons (remaining_variables state) (list (remaining_values state))))))))
 
