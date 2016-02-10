@@ -74,7 +74,7 @@
   (lambda (expression)
     (not (or (pair? expression) (null? expression)))))
 
-(define declare
+(define declare_var
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
@@ -114,3 +114,11 @@
 (define M_value-return
   (lambda (expression state)
     (M_value (cadr expression) state)))
+
+;M_declare_statement will take a list starting with 'var followed by an atom with an optional value
+(define M_declare
+  (lambda (statement state)
+    (cond
+      ((not (eq? 'var (car statement))) (error 'illegal "Declaration statment does not start with 'var'"))
+      ((null? (cddr statement)) (declare_var (cadr statement) state))
+      (else (update_state (cadr statement) (M_value (caddr statement) state) (declare_var (cadr statement) state))))))
