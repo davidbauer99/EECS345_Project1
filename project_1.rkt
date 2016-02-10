@@ -120,5 +120,22 @@
   (lambda (statement state)
     (cond
       ((not (eq? 'var (car statement))) (error 'illegal "Declaration statment does not start with 'var'"))
-      ((null? (cddr statement)) (declare_var (cadr statement) state))
-      (else (update_state (cadr statement) (M_value (caddr statement) state) (declare_var (cadr statement) state))))))
+      ((null? (declare-value-list statement)) (declare_var (declare-var-name statement) state))
+      (else (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state))))))
+
+(define declare-value-list cddr)
+
+(define declare-val caddr)
+
+(define declare-var-name cadr)
+
+; M_assign takes a statement and state and updates the state with the desired variable assignment.
+(define M_assign
+  (lambda (statement state)
+    (cond
+      ((not (eq? '= (car statement))) (error 'illegal "Assignment statement does not start with '='"))
+      (else (update_state (assign-var statement) (M_value (assign-expression statement) state) state)))))
+
+(define assign-var cadr)
+
+(define assign-expression caddr)
