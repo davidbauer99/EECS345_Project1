@@ -10,7 +10,7 @@
       ((atom? expression) (lookup expression state)) 
       ((eq? 'true expression) #t)
       ((eq? 'false expression) #f)
-      ((member (operator expression) '(+ - * / %)) (M_value-arith expression))
+      ((member (operator expression) '(+ - * / %)) (M_value-arith expression state))
       ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state)))))
 
 (define M_value-arith
@@ -69,6 +69,10 @@
 (define first_value caadr)
 
 (define remaining_values cdadr)
+
+(define atom?
+  (lambda (expression)
+    (not (or (pair? expression) (null? expression)))))
 
 (define declare
   (lambda (name state)
