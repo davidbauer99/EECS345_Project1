@@ -1,13 +1,43 @@
+;EECS 345 Project 1
+;David Bauer dmb172
+;Ryan Nowacoski rmn36
+
 (define M_value
-        (lambda (expression)
-          (cond
-            ((number? expression) expression)
-            ((eq? '+ (operator expression)) (+ (M_value (operand1 expression)) (M_value (operand2 expression))))
-            ((eq? '- (operator expression)) (- (M_value (operand1 expression)) (M_value (operand2 expression))))
-            ((eq? '* (operator expression)) (* (M_value (operand1 expression)) (M_value (operand2 expression))))
-            ((eq? '/ (operator expression)) (quotient (M_value (operand1 expression)) (M_value (operand2 expression))))
-            ((eq? '% (operator expression)) (remainder (M_value (operand1 expression)) (M_value (operand2 expression))))            
-            (else (error 'unknown "unknown expression")))))
+  (lambda (expression state)
+    (cond
+      ((null? expression) '())
+      ((number? expression) expression)
+      ((atom? expression) (lookup expression state)) 
+      ((eq? 'true expression) #t)
+      ((eq? 'false expression) #f)
+      ((member (operator expression) '(+ - * / %)) (M_value-arith expression))
+      ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state)))))
+
+(define M_value-arith
+  (lambda (expression state)
+    (cond
+      ((eq? '+ (operator expression)) (+ (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+      ((eq? '- (operator expression)) (if (not (null? (cddr expression)))
+                                            (- (M_value (operand1 expression) state) (M_value (operand2 expression) state))
+                                            (- 0 (M_value (operand1 expression) state))))
+      ((eq? '* (operator expression)) (* (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+      ((eq? '/ (operator expression)) (quotient (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+      ((eq? '% (operator expression)) (remainder (M_value (operand1 expression) state) (M_value (operand2 expression) state)))            
+      (else (error 'unknown "unknown expression")))))
+
+(define M_value-boolean
+  (lambda (expression state)
+      (cond
+        ((eq? '&& (operator expression)) (and (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+        ((eq? '|| (operator expression)) (or (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+        ((eq? '! (operator expression)) (not (M_value (operand1 expression) state))) 
+        ((eq? '< (operator expression)) (< (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+        ((eq? '> (operator expression)) (> (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+        ((eq? '<= (operator expression)) (<= (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+        ((eq? '>= (operator expression)) (>= (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+        ((eq? '== (operator expression)) (eq? (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
+        ((eq? '!= (operator expression)) (not (eq? (M_value (operand1 expression) state) (M_value (operand2 expression) state))))
+        (else (error 'unknown "unknown expression")))))
 
 (define operator car)
 
@@ -53,5 +83,30 @@
       ((null? (car state)) (error 'undefined "Attempting to assign an undefined variable."))
       ((eq? name (first_variable state)) (cons (variables state) (list (cons value (remaining_values state)))))
       (else ((lambda (newState)
-              (cons (cons (first_variable state) (variables newState)) (list (cons (first_value state) (state_values newState)))))
+               (cons (cons (first_variable state) (variables newState)) (list (cons (first_value state) (state_values newState)))))
              (update_state name value (cons (remaining_variables state) (list (remaining_values state)))))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;If-statement Section;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define M_state-if
+  (lambda (statement state)
+    (if (M_value (GetCondition statement) state)
+        (M_state-if (GetThenStatement statement) state)
+        (M_state-if (GetOptElse statement) state))))
+
+;Helper for if statement to get the first condition
+(define GetCondition cadr)
+
+;Helper for if statment to get the "then" statement
+(define GetThenStatement caddr)
+
+;Helper for if statement to get the optional else statement
+(define GetOptElse
+  (lambda (l)
+    (if (null? (cdddr l))
+        '()
+        (cadddr l))))
+
+;MStateReturn will take a return statement and return the statement right of "return"
+(define M_value-return
+  (lambda (expression state)
+    (M_value (cadr expression) state)))
