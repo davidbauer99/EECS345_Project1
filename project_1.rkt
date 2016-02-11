@@ -22,9 +22,9 @@
     (cond
       ((null? expression) '())
       ((number? expression) expression)
-      ((atom? expression) (lookup expression state)) 
       ((eq? 'true expression) #t)
       ((eq? 'false expression) #f)
+      ((atom? expression) (lookup expression state)) 
       ((member (operator expression) '(+ - * / %)) (M_value-arith expression state))
       ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state)))))
 
@@ -63,7 +63,15 @@
 ;MStateReturn will take a return statement and return the statement right of "return"
 (define M_value-return
   (lambda (expression state)
-    (M_value (cadr expression) state)))
+    (convert_value (M_value (cadr expression) state))))
+
+(define convert_value
+  (lambda (v)
+    (cond
+      ((null? v) '())
+      ((eq? v #t) 'true)
+      ((eq? v #f) 'false)
+      (else v))))
 
 ;;;;;;;;;;;;;;;;;;;;;;; M_state section ;;;;;;;;;;;;;;;;;;
 
