@@ -5,6 +5,16 @@
 ;Load the parser
 (load "simpleParser.scm")
 
+(define interpret
+  (lambda (f)
+    (interpret_parsed (parser f) '(() ()))))
+
+(define interpret_parsed
+  (lambda (statements state)
+    (cond
+      ((null? statements) state)
+      ((atom? state) state)
+      (else (interpret_parsed (cdr statements) (M_state (car statements) state))))))
 
 ;;;;;;;;;;;;;;;;; M_value functions ;;;;;;;;;;;;;;;;;;
 (define M_value
