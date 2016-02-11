@@ -60,11 +60,12 @@
 
 (define operand2 caddr)
 
-;MStateReturn will take a return statement and return the statement right of "return"
+;M_value-return will take a return statement and return the statement right of "return"
 (define M_value-return
   (lambda (expression state)
     (convert_value (M_value (cadr expression) state))))
 
+; converts #t or #f to true and false respectively
 (define convert_value
   (lambda (v)
     (cond
@@ -96,9 +97,10 @@
 
 (define M_state-if
   (lambda (statement state)
-    (if (M_value (GetCondition statement) state)
-        (M_state (GetThenStatement statement) state)
-        (M_state (GetOptElse statement) state))))
+    (cond
+      ((M_value (GetCondition statement) state) (M_state (GetThenStatement statement) state))
+      ((not (null? (GetOptElse statement))) (M_state (GetOptElse statement) state))
+      (else state))))
 
 ;Helper for if statement to get the first condition
 (define GetCondition cadr)
@@ -187,7 +189,7 @@
   (lambda (name value state)
     (cond
       ((null? state) 'undefined)
-      ((null? (car state)) (error 'undefined "Attempting to assign an undefined variable."))
+      ((null? (car state)) (error 'undefined "Attempting to assign an undeclared variable."))
       ((eq? name (first_variable state)) (cons (variables state) (list (cons value (remaining_values state)))))
       (else ((lambda (newState)
                (cons (cons (first_variable state) (variables newState)) (list (cons (first_value state) (state_values newState)))))
