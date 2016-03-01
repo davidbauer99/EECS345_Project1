@@ -81,7 +81,7 @@
       (else v))))
 
 ;;;;;;;;;;;;;;;;;;;;;;; M_state section ;;;;;;;;;;;;;;;;;;
-
+; lamnda (statement state return break continue throw)
 (define M_state
   (lambda (statement state)
     (cond
