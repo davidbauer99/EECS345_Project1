@@ -14,7 +14,11 @@
     (cond
       ((null? statements) state)
       ((atom? state) state)
-      (else (interpret_parsed (cdr statements) (M_state (car statements) state))))))
+      (else (interpret_parsed (remaining statements) (M_state (firstStatement statements) state))))))
+
+(define remaining cdr)
+
+(define firstStatement car)
 
 ;;;;;;;;;;;;;;;;; M_value functions ;;;;;;;;;;;;;;;;;;
 (define M_value
@@ -63,7 +67,9 @@
 ;M_value-return will take a return statement and return the statement right of "return"
 (define M_value-return
   (lambda (expression state)
-    (convert_value (M_value (cadr expression) state))))
+    (convert_value (M_value (evaluatable expression) state))))
+
+(define evaluatable cadr)
 
 ; converts #t or #f to true and false respectively
 (define convert_value
@@ -79,12 +85,12 @@
 (define M_state
   (lambda (statement state)
     (cond
-      ((null? (car statement)) (error 'error "Empty statement."))
-      ((eq? 'var (car statement)) (M_state-declare statement state))
-      ((eq? '= (car statement)) (M_state-assign statement state))
-      ((eq? 'return (car statement)) (M_value-return statement state))
-      ((eq? 'if (car statement)) (M_state-if statement state))
-      ((eq? 'while (car statement)) (M_state-while statement state))
+      ((null? (operation statement)) (error 'error "Empty statement."))
+      ((eq? 'var (operation statement)) (M_state-declare statement state))
+      ((eq? '= (operation statement)) (M_state-assign statement state))
+      ((eq? 'return (operation statement)) (M_value-return statement state))
+      ((eq? 'if (operation statement)) (M_state-if statement state))
+      ((eq? 'while (operation statement)) (M_state-while statement state))
       (else (error 'error "Unrecognized statement type.")))))
 
 (define M_state-while
@@ -111,15 +117,19 @@
 ;Helper for if statement to get the optional else statement
 (define GetOptElse
   (lambda (l)
-    (if (null? (cdddr l))
+    (if (null? (afterIfBlock l))
         '()
-        (cadddr l))))
+        (elseStatements l))))
+
+(define afterIfBlock cdddr)
+
+(define elseStatements cadddr)
 
 ;M_declare_statement will take a list starting with 'var followed by an atom with an optional value
 (define M_state-declare
   (lambda (statement state)
     (cond
-      ((not (eq? 'var (car statement))) (error 'illegal "Declaration statment does not start with 'var'"))
+      ((not (eq? 'var (operation statement))) (error 'illegal "Declaration statment does not start with 'var'"))
       ((null? (declare-value-list statement)) (declare_var (declare-var-name statement) state))
       (else (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state))))))
 
@@ -133,8 +143,10 @@
 (define M_state-assign
   (lambda (statement state)
     (cond
-      ((not (eq? '= (car statement))) (error 'illegal "Assignment statement does not start with '='"))
+      ((not (eq? '= (operation statement))) (error 'illegal "Assignment statement does not start with '='"))
       (else (update_state (assign-var statement) (M_value (assign-expression statement) state) state)))))
+
+(define operation car)
 
 (define assign-var cadr)
 
@@ -146,7 +158,7 @@
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
-      ((null? (car state)) (error 'error "Using a variable before declaring it."))
+      ((null? (variables state)) (error 'error "Using a variable before declaring it."))
       ((and (eq? name (first_variable state)) (eq? (first_value state) 'undefined)) (error 'error "Using variable before it is assigned."))
       ((eq? name (first_variable state)) (first_value state))
       (else (lookup name (cons (remaining_variables state) (list (remaining_values state))))))))
@@ -172,16 +184,21 @@
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
-      ((contains? name (car state)) (error 'error "Duplicate delcaration of variable."))
+      ((contains? name (variables state)) (error 'error "Duplicate delcaration of variable."))
       (else (cons (cons name (variables state)) (list (cons 'undefined (state_values state))))))))
 
 (define contains?
   (lambda (v l)
     (cond
       ((null? l) #f)
-      ((eq? v (car l)) #t)
-      (else (contains? v (cdr l))))))
-        
+      ((eq? v (frontOfList l)) #t)
+      (else (contains? v (restOfList l))))))
+
+(define frontOfList car)
+
+(define restOfList cdr)
+
+(define variableList car)
     
 
 ; update_state takes a name and a value and updates that name with the value if it exists in the state
@@ -189,7 +206,7 @@
   (lambda (name value state)
     (cond
       ((null? state) 'undefined)
-      ((null? (car state)) (error 'undefined "Attempting to assign an undeclared variable."))
+      ((null? (variableList state)) (error 'undefined "Attempting to assign an undeclared variable."))
       ((eq? name (first_variable state)) (cons (variables state) (list (cons value (remaining_values state)))))
       (else ((lambda (newState)
                (cons (cons (first_variable state) (variables newState)) (list (cons (first_value state) (state_values newState)))))
