@@ -14,7 +14,15 @@
     (cond
       ((null? statements) state)
       ((atom? state) state)
-      (else (interpret_parsed (remaining statements) (M_state (firstStatement statements) state))))))
+      (else (M_state (firstStatement statements) state
+                     (lambda (s) (interpret_parsed (remaining statements) s))
+                     baseBreak baseContinue baseThrow)))))
+
+(define baseBreak (lambda (s) (error 'error "Break outside of block")))
+
+(define baseContinue (lambda (s) (error 'error "Continue outside of block")))
+
+(define baseThrow (lambda (v s) (error 'error "Throw outside of try block")))
 
 (define remaining cdr)
 
@@ -83,15 +91,96 @@
 ;;;;;;;;;;;;;;;;;;;;;;; M_state section ;;;;;;;;;;;;;;;;;;
 ; lamnda (statement state return break continue throw)
 (define M_state
-  (lambda (statement state)
+  (lambda (statement state return break continue throw)
     (cond
       ((null? (operation statement)) (error 'error "Empty statement."))
-      ((eq? 'var (operation statement)) (M_state-declare statement state))
-      ((eq? '= (operation statement)) (M_state-assign statement state))
+      ((eq? 'var (operation statement)) (M_state-declare statement state (lambda (s) (return s)) break continue throw))
+      ((eq? '= (operation statement)) (M_state-assign statement state (lambda (s) (return s)) break continue throw))
+      ((eq? 'try (operation statement)) (M_state-try statement state (lambda (s) (return s)) break continue throw))
+      ((eq? 'throw (operation statement)) (M_state-throw statement state throw))
       ((eq? 'return (operation statement)) (M_value-return statement state))
       ((eq? 'if (operation statement)) (M_state-if statement state))
       ((eq? 'while (operation statement)) (M_state-while statement state))
       (else (error 'error "Unrecognized statement type.")))))
+
+(define M_state-block
+  (lambda (statements state return break continue throw)
+    (cond
+      ((null? statements) (return state))
+      (else (M_state (firstStatement statements) state
+                     (lambda (s) (M_state-block (remaining statements) s (lambda (s2) (return s2)) break continue throw))
+                     break continue throw)))))
+
+(define M_state-throw
+  (lambda (statement state throw)
+    (throw (M_value (throwVar statement) state) state)))
+
+(define throwVar cadr)
+
+(define M_state-try
+  (lambda (statement state return break continue throw)
+    (if (null? (finallyBlock statement))
+        (M_state-try-catch (tryBlock statement) (catchBlock statement) state return break continue throw)
+        (M_state-try-catch-finally (tryBlock statement) (catchBlock statement) (finallyStatements statement) state return break continue throw))))
+
+(define tryBlock cadr)
+
+(define catchBlock cdaddr)
+
+(define finallyStatements
+  (lambda (statement)
+    (cadr (cadddr statement))))
+
+(define finallyBlock cadddr)
+
+(define M_state-try-catch
+  (lambda (try catch state return break continue throw)
+    (M_state-block try state return break continue
+                   (lambda (v s) (M_state-catch catch v s return break continue throw)))))
+
+(define M_state-catch
+  (lambda (catch value state return break continue throw)
+    (cond
+      ((null? value) (error 'error "Null value was thrown."))
+      (else (M_state-declare (buildDeclare (varName catch) value) state
+                             (lambda (s) (M_state-block (catchStatements catch) s (lambda (s2) (return s2)) break continue throw))
+                             break continue throw)))))
+
+(define catchStatements cadr)
+
+(define buildDeclare
+  (lambda (name value)
+    (cons 'var (cons name (list value)))))
+
+(define varName caar)
+
+(define M_state-try-catch-finally
+  (lambda (try catch finally state return break continue throw)
+    (M_state-block try state
+                   (lambda (s) (finally-return-continuation finally s return break continue throw)); return
+                   (lambda (s) (finally-break-continuation finally s return break continue throw)) ; break
+                   (lambda (s) (finally-continue-continuation finally s return break continue throw)) ; continue
+                   (lambda (v s) (finally-throw-continuation catch v finally s return break continue throw)))))
+
+(define finally-return-continuation
+  (lambda (finally state return break continue throw)
+    (M_state-block finally state (lambda (s) (return s)) break continue throw)))
+               
+(define finally-break-continuation
+  (lambda (finally state return break continue throw)
+    (M_state-block finally state (lambda (s) (break s)) break continue throw)))
+
+(define finally-continue-continuation
+  (lambda (finally state return break continue throw)
+    (M_state-block finally state (lambda (s) (continue s)) break continue throw)))
+
+(define finally-throw-continuation
+  (lambda (catch value finally state return break continue throw)
+    (M_state-catch catch value state
+                   (lambda (s) (finally-return-continuation finally s return break continue throw))
+                   (lambda (s) (finally-break-continuation finally s return break continue throw))
+                   (lambda (s) (finally-continue-continuation finally s return break continue throw))
+                   (lambda (v s) (M_state-block finally s (lambda (s2) (throw v s2)) break continue throw)))))
 
 (define M_state-while
   (lambda (statement state)
@@ -127,11 +216,11 @@
 
 ;M_declare_statement will take a list starting with 'var followed by an atom with an optional value
 (define M_state-declare
-  (lambda (statement state)
+  (lambda (statement state return break continue throw)
     (cond
       ((not (eq? 'var (operation statement))) (error 'illegal "Declaration statment does not start with 'var'"))
-      ((null? (declare-value-list statement)) (declare_var (declare-var-name statement) state))
-      (else (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state))))))
+      ((null? (declare-value-list statement)) (return (declare_var (declare-var-name statement) state)))
+      (else (return (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state)))))))
 
 (define declare-value-list cddr)
 
@@ -141,10 +230,10 @@
 
 ; M_assign takes a statement and state and updates the state with the desired variable assignment.
 (define M_state-assign
-  (lambda (statement state)
+  (lambda (statement state return break continue throw)
     (cond
       ((not (eq? '= (operation statement))) (error 'illegal "Assignment statement does not start with '='"))
-      (else (update_state (assign-var statement) (M_value (assign-expression statement) state) state)))))
+      (else (return (update_state (assign-var statement) (M_value (assign-expression statement) state) state))))))
 
 (define operation car)
 
