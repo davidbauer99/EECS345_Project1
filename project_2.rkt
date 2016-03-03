@@ -114,6 +114,16 @@
   (lambda (state next)
     (next state)))
 
+(define M_state-begin
+  (lambda (statement state next break continue throw)
+    (cond
+      ((not (eq? (car statement) 'begin)) (error 'error "Begin block without 'begin' at the beginning."))
+      (else (M_state-add-frame state (lambda (st) (M_state-block (cdr statement) st
+                                                                 (lambda (s) (M_state-pop-frame s2 (lambda (s2) (next s2))))
+                                                                 (lambda (s) (M_state-pop-frame s2 (lambda (s2) (break s2))))
+                                                                 (lambda (s) (M_state-pop-frame s2 (lambda (s2) (continue s2))))
+                                                                 (lambda (s) (M_state-pop-frame s2 (lambda (s2) (throw s2)))))))))))
+
 (define M_state-block
   (lambda (statements state next break continue throw)
     (cond
