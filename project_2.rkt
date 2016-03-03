@@ -106,12 +106,20 @@
 ;For dealing with state frame... M_state-begin takes a (begin (...) (...)), adds a frame and modifies
 ; return, break, continue, throw to pop a frame
 
+(define M_state-add-frame
+  (lambda (state next)
+    (next state)))
+
+(define M_state-pop-frame
+  (lambda (state next)
+    (next state)))
+
 (define M_state-block
   (lambda (statements state next break continue throw)
     (cond
       ((null? statements) (next state))
       (else (M_state (firstStatement statements) state
-                     (lambda (s) (M_state-block (remaining statements) s (lambda (s2) (next s2)) break continue throw))
+                     (lambda (s) (M_state-block (remaining statements) s next break continue throw))
                      break continue throw)))))
 
 (define M_state-throw
@@ -124,8 +132,17 @@
 (define M_state-try
   (lambda (statement state next break continue throw)
     (if (null? (finallyBlock statement))
-        (M_state-try-catch (tryBlock statement) (catchBlock statement) state next break continue throw)
-        (M_state-try-catch-finally (tryBlock statement) (catchBlock statement) (finallyStatements statement) state next break continue throw))))
+        (M_state-add-frame state (lambda (st) (M_state-try-catch (tryBlock statement) (catchBlock statement) st
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
+                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2)))))))
+        (M_state-add-frame state (lambda (st) (M_state-try-catch-finally
+                                               (tryBlock statement) (catchBlock statement) (finallyStatements statement) st
+                                               (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
+                                               (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
+                                               (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
+                                               (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))))))))
 
 (define tryBlock cadr)
 
@@ -147,10 +164,13 @@
   (lambda (catch value state next break continue throw)
     (cond
       ((null? value) (error 'error "Null value was thrown."))
-      (else (M_state-declare (buildDeclare (varName catch) value) state
-                             (lambda (s) (M_state-block (catchStatements catch) s (lambda (s2) (next s2)) break continue throw)))))))
+      (else (M_state-pop-frame state
+                               (lambda (st) (M_state-add-frame st
+                                                               (lambda (s) (M_state-declare (buildDeclare (varName catch) value) s
+                                                                                            (lambda (s2) (M_state-block (catchStatements catch) s2 next break continue throw)))))))))))
 
 (define catchStatements cadr)
+      
 
 (define buildDeclare
   (lambda (name value)
@@ -166,18 +186,24 @@
                    (lambda (s) (finally-continue-continuation finally s next break continue throw)) ; continue
                    (lambda (v s) (finally-throw-continuation catch v finally s next break continue throw)))))
 
+(define M_state-finally
+  (lambda (statements state next break continue throw)
+    (M_state-pop-frame state
+                       (lambda (st) (M_state-add-frame st
+                                                       (lambda (s) (M_state-block statements s next break continue throw)))))))
+
 ; Make master M_state-finally that adds frame, modifies next break continue and throw to remove frame, calls M_state-block
 (define finally-next-continuation
   (lambda (finally state next break continue throw)
-    (M_state-block finally state (lambda (s) (next s)) break continue throw)))
+    (M_state-finally finally state (lambda (s) (next s)) break continue throw)))
                
 (define finally-break-continuation
   (lambda (finally state next break continue throw)
-    (M_state-block finally state (lambda (s) (break s)) break continue throw)))
+    (M_state-finally finally state (lambda (s) (break s)) break continue throw)))
 
 (define finally-continue-continuation
   (lambda (finally state next break continue throw)
-    (M_state-block finally state (lambda (s) (continue s)) break continue throw)))
+    (M_state-finally finally state (lambda (s) (continue s)) break continue throw)))
 
 (define finally-throw-continuation
   (lambda (catch value finally state next break continue throw)
@@ -185,7 +211,7 @@
                    (lambda (s) (finally-next-continuation finally s next break continue throw))
                    (lambda (s) (finally-break-continuation finally s next break continue throw))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw))
-                   (lambda (v s) (M_state-block finally s (lambda (s2) (throw v s2)) break continue throw)))))
+                   (lambda (v s) (M_state-finally finally s (lambda (s2) (throw v s2)) break continue throw)))))
 
 (define M_state-while
   (lambda (statement state)
