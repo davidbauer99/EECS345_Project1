@@ -94,13 +94,16 @@
   (lambda (statement state next break continue throw)
     (cond
       ((null? (operation statement)) (error 'error "Empty statement."))
-      ((eq? 'var (operation statement)) (M_state-declare statement state (lambda (s) (next s))))
-      ((eq? '= (operation statement)) (M_state-assign statement state (lambda (s) (next s)) break continue throw))
-      ((eq? 'try (operation statement)) (M_state-try statement state (lambda (s) (next s)) break continue throw))
+      ((eq? 'var (operation statement)) (M_state-declare statement state next))
+      ((eq? '= (operation statement)) (M_state-assign statement state next break continue throw))
+      ((eq? 'try (operation statement)) (M_state-try statement state next break continue throw))
+      ((eq? 'begin (operation statement)) (M_state-begin statement state next break continue throw))
       ((eq? 'throw (operation statement)) (M_state-throw statement state throw))
+      ((eq? 'break (operation statement)) (M_state-break statement state break))
+      ((eq? 'continue (operation statement)) (M_state-continue statement state continue))
       ((eq? 'return (operation statement)) (M_value-return statement state))
       ((eq? 'if (operation statement)) (M_state-if statement state))
-      ((eq? 'while (operation statement)) (M_state-while statement state))
+      ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw))
       (else (error 'error "Unrecognized statement type.")))))
 
 (define M_state-add-frame
@@ -116,10 +119,10 @@
     (cond
       ((not (eq? (car statement) 'begin)) (error 'error "Begin block without 'begin' at the beginning."))
       (else (M_state-add-frame state (lambda (st) (M_state-block (cdr statement) st
-                                                                 (lambda (s) (M_state-pop-frame s2 (lambda (s2) (next s2))))
-                                                                 (lambda (s) (M_state-pop-frame s2 (lambda (s2) (break s2))))
-                                                                 (lambda (s) (M_state-pop-frame s2 (lambda (s2) (continue s2))))
-                                                                 (lambda (s) (M_state-pop-frame s2 (lambda (s2) (throw s2)))))))))))
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (throw s2)))))))))))
 
 (define M_state-block
   (lambda (statements state next break continue throw)
@@ -132,6 +135,14 @@
 (define M_state-throw
   (lambda (statement state throw)
     (throw (M_value (throwVar statement) state) state)))
+
+(define M_state-break
+  (lambda (statement state break)
+    (break state)))
+
+(define M_state-continue
+  (lambda (statement state continue)
+    (continue state)))
 
 (define throwVar cadr)
 
@@ -218,10 +229,16 @@
                    (lambda (v s) (M_state-finally finally s (lambda (s2) (throw v s2)) break continue throw)))))
 
 (define M_state-while
-  (lambda (statement state)
+  (lambda (statement state next break continue throw)
     (if (M_value-boolean (GetCondition statement) state)
-        (M_state-while statement (M_state (GetStatement statement) state))
-        state)))
+        (M_state (GetStatement statement) state
+                 (lambda (s) (M_state-while statement s next break continue throw))
+                 (lambda (s) (next s))
+                 (lambda (s) (M_state-while statement s next break continue throw))
+                 throw)
+        (next state))))
+        ;(M_state-while statement (M_state (GetStatement statement) state))
+        ;state)))
 
 (define GetStatement caddr)
 
