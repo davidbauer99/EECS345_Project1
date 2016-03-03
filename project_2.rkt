@@ -103,9 +103,6 @@
       ((eq? 'while (operation statement)) (M_state-while statement state))
       (else (error 'error "Unrecognized statement type.")))))
 
-;For dealing with state frame... M_state-begin takes a (begin (...) (...)), adds a frame and modifies
-; return, break, continue, throw to pop a frame
-
 (define M_state-add-frame
   (lambda (state next)
     (next state)))
@@ -138,7 +135,6 @@
 
 (define throwVar cadr)
 
-; Add frame, same as M_state-begin, special handling since no (begin...) for try
 (define M_state-try
   (lambda (statement state next break continue throw)
     (if (null? (finallyBlock statement))
@@ -169,7 +165,6 @@
     (M_state-block try state next break continue
                    (lambda (v s) (M_state-catch catch v s next break continue throw)))))
 
-; Add frame, same as M_state-begin, special handling since no (begin...) for catch
 (define M_state-catch
   (lambda (catch value state next break continue throw)
     (cond
@@ -202,7 +197,6 @@
                        (lambda (st) (M_state-add-frame st
                                                        (lambda (s) (M_state-block statements s next break continue throw)))))))
 
-; Make master M_state-finally that adds frame, modifies next break continue and throw to remove frame, calls M_state-block
 (define finally-next-continuation
   (lambda (finally state next break continue throw)
     (M_state-finally finally state (lambda (s) (next s)) break continue throw)))
