@@ -206,7 +206,7 @@
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
                    (lambda (v s) (finally-throw-continuation catch v finally s next break continue throw return))
-                   (lambda (v s) (finally-return-continuation finally s next break continue throw return)))))
+                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
 
 (define M_state-finally
   (lambda (statements state next break continue throw return)
@@ -233,7 +233,11 @@
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
                    (lambda (v s) (M_state-finally finally s (lambda (s2) (throw v s2)) break continue throw return))
-                   (lambda (v s) (finally-return-continuation finally s next break continue throw return)))))
+                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
+
+(define finally-return-continuation
+  (lambda (finally state value next break continue throw return)
+    (M_state-finally finally state (lambda (s) (return v s)) break continue throw return)))
 
 (define M_state-while
   (lambda (statement state next break continue throw return)
