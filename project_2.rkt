@@ -202,9 +202,9 @@
 (define M_state-try-catch-finally
   (lambda (try catch finally state next break continue throw return)
     (M_state-block try state
-                   (lambda (s) (finally-next-continuation finally s next break continue throw return)); next
-                   (lambda (s) (finally-break-continuation finally s next break continue throw return)) ; break
-                   (lambda (s) (finally-continue-continuation finally s next break continue throw return)) ; continue
+                   (lambda (s) (finally-next-continuation finally s next break continue throw return))
+                   (lambda (s) (finally-break-continuation finally s next break continue throw return))
+                   (lambda (s) (finally-continue-continuation finally s next break continue throw return))
                    (lambda (v s) (finally-throw-continuation catch v finally s next break continue throw return))
                    (lambda (v s) (finally-return-continuation finally s next break continue throw return)))))
 
@@ -245,8 +245,6 @@
                  throw
                  return)
         (next state))))
-        ;(M_state-while statement (M_state (GetStatement statement) state))
-        ;state)))
 
 (define GetStatement caddr)
 
@@ -256,9 +254,6 @@
       ((M_value (GetCondition statement) state) (M_state (GetThenStatement statement) state next break continue throw return))
       ((not (null? (GetOptElse statement))) (M_state (GetOptElse statement) state next break continue throw return))
       (else (next state)))))
-      ;((M_value (GetCondition statement) state) (M_state (GetThenStatement statement) state))
-      ;((not (null? (GetOptElse statement))) (M_state (GetOptElse statement) state))
-      ;(else state))))
 
 ;Helper for if statement to get the first condition
 (define GetCondition cadr)
