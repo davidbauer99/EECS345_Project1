@@ -335,15 +335,14 @@
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
-      ((contains? name (variableList state)) (error 'error "Duplicate delcaration of variable."))
-      (else (cons (cons name (variableList state)) (list (cons 'undefined (state_values state))))))))
+      ((contains? name (variables state)) (error 'error "Duplicate delcaration of variable."))
+      (else (cons (cons name (variables state)) (list (cons 'undefined (state_values state))))))))
 
 (define contains?
   (lambda (v l)
     (cond
       ((null? l) #f)
       ((eq? v (frontOfList l)) #t)
-      ((list? (frontOfList l)) (or (contains? v (frontOfList l)) (contains? v (restOfList l))))
       (else (contains? v (restOfList l))))))
 
 (define frontOfList car)
