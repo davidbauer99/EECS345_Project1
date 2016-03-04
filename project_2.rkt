@@ -336,7 +336,7 @@
     (cond
       ((null? state) 'undefined)
       ((contains? name (variableList state)) (error 'error "Duplicate delcaration of variable."))
-      (else (cons (cons name (variableList state)) (list (cons 'undefined (state_values state))))))))
+      (else (cons (cons (cons name (caar state)) (cdar state)) (list (cons (cons 'undefined (caadr state)) (cdadr state))))))))
 
 (define contains?
   (lambda (v l)
