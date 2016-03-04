@@ -336,7 +336,7 @@
     (cond
       ((null? state) 'undefined)
       ((contains? name (variableList state)) (error 'error "Duplicate delcaration of variable."))
-      (else (cons (cons (cons name (caar state)) (cdar state)) (list (cons (cons 'undefined (caadr state)) (cdadr state))))))))
+      (else (cons (cons (cons name (firstVariableFrame state)) (restOfVariableFrames state)) (list (cons (cons 'undefined (firstValueFrame state)) (restOfValueFrames state))))))))
 
 (define contains?
   (lambda (v l)
@@ -351,7 +351,14 @@
 (define restOfList cdr)
 
 (define variableList car)
-    
+
+(define firstVariableFrame caar)
+
+(define restOfVariableFrames cdar)
+
+(define firstValueFrame caadr)
+
+(define restOfValueFrames cdadr)
 
 ; update_state takes a name and a value and updates that name with the value if it exists in the state
 (define update_state
