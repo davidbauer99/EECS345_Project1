@@ -110,11 +110,11 @@
 
 (define M_state-add-frame
   (lambda (state next)
-    (next state)))
+    (next (cons (cons '() (variableList state)) (list (cons '() (valueList state)))))))
 
 (define M_state-pop-frame
   (lambda (state next)
-    (next state)))
+    (next (cons (restOfVariableFrames state) (list (restOfValueFrames state))))))
 
 (define M_state-begin
   (lambda (statement state next break continue throw return)
@@ -361,15 +361,6 @@
 (define firstValueFrame caadr)
 
 (define restOfValueFrames cdadr)
-
-;push and pop frames from the state
-(define push_frame
-  (lambda (state)
-    (cons (cons '() (variableList state)) (list (cons '() (valueList state))))))
-
-(define pop_frame
-  (lambda (state)
-    (cons (restOfVariableFrames state) (list (restOfValueFrames state)))))
 
 ; update_state takes a name and a value and updates that name with the value if it exists in the state
 (define update_state
