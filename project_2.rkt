@@ -352,6 +352,8 @@
 
 (define variableList car)
 
+(define valueList cadr)
+
 (define firstVariableFrame caar)
 
 (define restOfVariableFrames cdar)
@@ -359,6 +361,15 @@
 (define firstValueFrame caadr)
 
 (define restOfValueFrames cdadr)
+
+;push and pop frames from the state
+(define push_frame
+  (lambda (state)
+    (cons (cons '() (variableList state)) (list (cons '() (valueList state))))))
+
+(define pop_frame
+  (lambda (state)
+    (cons (restOfVariableFrames state) (list (restOfValueFrames state)))))
 
 ; update_state takes a name and a value and updates that name with the value if it exists in the state
 (define update_state
