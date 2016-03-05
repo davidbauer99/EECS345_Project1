@@ -7,7 +7,7 @@
 
 (define interpret
   (lambda (f)
-    (interpret_parsed (parser f) '(() ()))))
+    (interpret_parsed (parser f) '((()) (())))))
 
 (define interpret_parsed
   (lambda (statements state)
@@ -57,6 +57,8 @@
 (define M_value-boolean
   (lambda (expression state)
       (cond
+        ((eq? 'true expression) #t)
+        ((eq? 'false expression) #f)
         ((eq? '&& (operator expression)) (and (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
         ((eq? '|| (operator expression)) (or (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
         ((eq? '! (operator expression)) (not (M_value (operand1 expression) state))) 
@@ -151,20 +153,31 @@
 
 (define M_state-try
   (lambda (statement state next break continue throw return)
-    (if (null? (finallyBlock statement))
+    (cond
+      ((null? (finallyBlock statement))
         (M_state-add-frame state (lambda (st) (M_state-try-catch (tryBlock statement) (catchBlock statement) st
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                  (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))
+                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2))))))))
+      ((null? (catchList statement))
+       (M_state-add-frame state (lambda (st) (M_state-try-finally (tryBlock statement) (finallyStatements statement) st
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
+                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
+                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
+                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))) 
+      (else
         (M_state-add-frame state (lambda (st) (M_state-try-catch-finally
                                                (tryBlock statement) (catchBlock statement) (finallyStatements statement) st
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                               (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2))))))))))
+                                               (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))))))
+
+(define catchList caddr)
 
 (define tryBlock cadr)
 
@@ -205,7 +218,16 @@
                    (lambda (s) (finally-next-continuation finally s next break continue throw return))
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v s) (finally-throw-continuation catch v finally s next break continue throw return))
+                   (lambda (v s) (finally-catch-throw-continuation catch v finally s next break continue throw return))
+                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
+
+(define M_state-try-finally
+  (lambda (try finally state next break continue throw return)
+    (M_state-block try state
+                   (lambda (s) (finally-next-continuation finally s next break continue throw return))
+                   (lambda (s) (finally-break-continuation finally s next break continue throw return))
+                   (lambda (s) (finally-continue-continuation finally s next break continue throw return))
+                   (lambda (v s) (finally-throw-continuation finally s v next break continue throw return))
                    (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
 
 (define M_state-finally
@@ -227,6 +249,10 @@
     (M_state-finally finally state (lambda (s) (continue s)) break continue throw return)))
 
 (define finally-throw-continuation
+  (lambda (finally state value next break continue throw return)
+    (M_state-finally finally state (lambda (s) (throw value s)) break continue throw return)))
+
+(define finally-catch-throw-continuation
   (lambda (catch value finally state next break continue throw return)
     (M_state-catch catch value state
                    (lambda (s) (finally-next-continuation finally s next break continue throw return))
@@ -282,7 +308,7 @@
     (cond
       ((not (eq? 'var (operation statement))) (error 'illegal "Declaration statment does not start with 'var'"))
       ((null? (declare-value-list statement)) (next (declare_var (declare-var-name statement) state)))
-      (else (next (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state)))))))
+      (else (next (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state) (lambda (v) v)))))))
 
 (define declare-value-list cddr)
 
@@ -295,7 +321,7 @@
   (lambda (statement state next break continue throw return)
     (cond
       ((not (eq? '= (operation statement))) (error 'illegal "Assignment statement does not start with '='"))
-      (else (next (update_state (assign-var statement) (M_value (assign-expression statement) state) state))))))
+      (else (next (update_state (assign-var statement) (M_value (assign-expression statement) state) state (lambda (v) v)))))))
 
 (define operation car)
 
@@ -367,12 +393,25 @@
 (define restOfValueFrames cdadr)
 
 ; update_state takes a name and a value and updates that name with the value if it exists in the state
-(define update_state
+(define update_state_frame
   (lambda (name value state)
     (cond
       ((null? state) 'undefined)
       ((null? (variableList state)) (error 'undefined "Attempting to assign an undeclared variable."))
-      ((eq? name (first_variable state)) (cons (variables state) (list (cons value (remaining_values state)))))
+      ((eq? name (caar state)) (cons (variables state) (list (cons value (remaining_values state)))))
       (else ((lambda (newState)
-               (cons (cons (first_variable state) (variables newState)) (list (cons (first_value state) (state_values newState)))))
-             (update_state name value (cons (remaining_variables state) (list (remaining_values state)))))))))
+               (cons (cons (caar state) (variables newState)) (list (cons (caadr state) (state_values newState)))))
+             (update_state_frame name value (cons (remaining_variables state) (list (remaining_values state)))))))))
+
+(define update_state
+  (lambda (name value state return)
+    (cond
+      ((null? state) (error 'undefined "Attempting to assign an undeclared variable."))
+      ((null? (variableList state)) (error 'undefined "Attempting to assign an undeclared variable."))
+      ((contains? name (firstVariableFrame state)) (return (cons (variableList state)
+                                                           (list (cons (valueList (update_state_frame name value (firstFrameState state))) (restOfValueFrames state))))))
+      (else (update_state name value (cons (restOfVariableFrames state) (list (restOfValueFrames state))) (lambda (s) (return (cons (cons (firstVariableFrame state) (variableList s)) (list (cons (firstValueFrame state) (valueList s)))))))))))
+
+(define firstFrameState
+  (lambda (state)
+    (cons (firstVariableFrame state) (list (firstValueFrame state)))))
