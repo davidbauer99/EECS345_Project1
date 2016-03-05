@@ -304,27 +304,31 @@
 (define assign-expression caddr)
 
 ;;;;;;;;;;;;;;; State manipulation and management ;;;;;;;;;;;;;;;;;;;;;;;
-
 (define lookup
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
-      ((null? (variables state)) (error 'error "Using a variable before declaring it."))
-      ((and (eq? name (first_variable state)) (eq? (first_value state) 'undefined)) (error 'error "Using variable before it is assigned."))
+      ((empty?  (variables state)) (error 'error "Using variable before it is assigned."))
+      ((empty?  (firstVariableFrame state)) (lookup name (cons (remaining_variables state) (list (remaining_values state)))))
+      ((and (eq? name (first_variable state)) (eq? 'undefined (first_value state))) (error 'error "Using variable before it is assigned."))
       ((eq? name (first_variable state)) (first_value state))
-      (else (lookup name (cons (remaining_variables state) (list (remaining_values state))))))))
-
+      (else (lookup name (cons (cons (rest_of_first_varframe state) (restOfVariableFrames state)) (list (cons (rest_of_first_valframe state) (restOfValueFrames state)))))))))
+              
 (define variables car)
 
-(define first_variable caar)
+(define first_variable caaar)
 
 (define remaining_variables cdar)
 
 (define state_values cadr)
 
-(define first_value caadr)
+(define first_value caaadr)
 
 (define remaining_values cdadr)
+
+(define rest_of_first_varframe cdaar)
+
+(define rest_of_first_valframe cdaadr)
 
 (define atom?
   (lambda (expression)
