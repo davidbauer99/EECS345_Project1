@@ -1,6 +1,6 @@
 ;EECS 345 Project 2
-;David Bauer dmb172- Try/catch finally, throw
-;Ryan Nowacoski rmn36- Update State handling to use box, continue/break for value functions, multiple statements
+;David Bauer dmb172
+;Ryan Nowacoski rmn36
 
 ;Load the parser
 (load "simpleParser.scm")
