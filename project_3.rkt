@@ -1,6 +1,7 @@
 ;EECS 345 Project 2
-;David Bauer dmb172
-;Ryan Nowacoski rmn36
+;David Bauer dmb172 - tail recusion M_value, M_value-funcall, M_state-funcall
+;Ryan Nowacoski rmn36 - Boxes, interpret
+; M_state-function
 
 ;Load the parser
 (load "simpleParser.scm")
