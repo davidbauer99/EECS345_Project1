@@ -1,10 +1,10 @@
 ;EECS 345 Project 2
-;David Bauer dmb172 - tail recusion M_value, M_value-funcall, M_state-funcall
+;David Bauer dmb172 - M_value-funcall, M_state-funcall
 ;Ryan Nowacoski rmn36 - Boxes, interpret
 ; M_state-function
 
 ;Load the parser
-(load "simpleParser.scm")
+;(load "simpleParser.scm")
 (load "functionParser.scm")
 
 (define interpret
@@ -42,7 +42,19 @@
       ((eq? 'false expression) (return #f state))
       ((atom? expression) (return (lookup expression state) state)) 
       ((member (operator expression) '(+ - * / %)) (M_value-arith expression state return throw))
-      ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state return throw)))))
+      ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state return throw))
+      ((eq? (operator expression) 'funcall) (M_value-funcall expression state return throw)))))
+
+(define M_value-funcall
+  (lambda (expression state return throw)
+    (cond
+      ((not (eq? (operator expression) 'funcall)) (error "Error: M_value-funcall called without function call."))
+      (else (M_state-funcall statement state
+                             (lambda (s) (error "Error: non-returning function used as a value."))
+                             baseBreak
+                             baseContinue
+                             throw
+                             return)))))
 
 (define M_value-arith
   (lambda (expression state return throw)
@@ -146,6 +158,7 @@
       ((eq? 'return (operation statement)) (M_value-return statement state return throw))
       ((eq? 'if (operation statement)) (M_state-if statement state next break continue throw return))
       ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw return))
+      ((eq? 'funcall (operation statement)) (M_state-funcall statement state next baseBreak baseContinue throw (lambda (v s) (next s))))
       (else (error 'error "Unrecognized statement type.")))))
 
 (define M_state-add-frame
@@ -166,6 +179,44 @@
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                  (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
                                                                  (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))))))
+
+(define M_state-funcall
+  (lambda (statement state next break continue throw return)
+    (cond
+      ((not (eq? (car statement) 'funcall)) (error 'error "Function evaluation without 'funcall' at the beginning."))
+      (else (M_state-add-frame state (lambda (st) (M_state-declare-func-vars (funcInputs statement) (funcArgs (lookup (funcName statement))) st
+                                                                             (lambda (st2) (M_state-block (funcStatements (lookup (funcName statement))) st2
+                                                                                                        (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
+                                                                                                        (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
+                                                                                                        (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
+                                                                                                        (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
+                                                                                                        (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2))))))
+                                                                             throw)))))))
+
+(define funcStatements cadr)
+
+(define funcName cadr)
+
+(define funcInputs cddr)
+
+(define funcArgs car)
+
+(define M_state-declare-func-vars
+  (lambda (inputs args state next throw)
+    (cond
+      ((and (null? inputs) (null? args)) (next state))
+      ((null? inputs) (error "Error: not enough inputs for function call."))
+      ((null? args) (error "Error: more arguments than inputs for function call."))
+      (else (M_state-declare (buildDeclare (firstArg args) (firstInput)) state
+                             (lambda (s) (M_state-declare-func-vars (remainingInputs inputs) (remainingArgs args) s next throw)) throw)))))
+
+(define firstArg car)
+
+(define firstInput car)
+
+(define remainingInputs cdr)
+
+(define remainingArgs cdr)
 
 (define M_state-block
   (lambda (statements state next break continue throw return)
