@@ -14,7 +14,7 @@
 (define interpret_parsed
   (lambda (statements state)
     (cond
-      ((null? statements) state)
+      ((null? statements) (M_state '(funcall main) state (lambda (s) (error "Error: Main did not return")) baseBreak baseContinue baseThrow baseReturn))
       ((atom? state) state)
       (else (M_state (firstStatement statements) state
                      (lambda (s) (interpret_parsed (remaining statements) s))
@@ -159,6 +159,7 @@
       ((eq? 'if (operation statement)) (M_state-if statement state next break continue throw return))
       ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw return))
       ((eq? 'funcall (operation statement)) (M_state-funcall statement state next baseBreak baseContinue throw (lambda (v s) (next s))))
+      ((eq? 'function (operation statement)) (M_state-function statement state next break continue throw return))
       (else (error 'error "Unrecognized statement type.")))))
 
 (define M_state-add-frame
@@ -180,12 +181,16 @@
                                                                  (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
                                                                  (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))))))
 
+(define M_state-function
+  (lambda (statement state next break continue throw return)
+    (update_state (cadr statement) (cddr statement) (declare_var (cadr statement) state) (lambda (s) (next s)))))
+
 (define M_state-funcall
   (lambda (statement state next break continue throw return)
     (cond
       ((not (eq? (car statement) 'funcall)) (error 'error "Function evaluation without 'funcall' at the beginning."))
-      (else (M_state-add-frame state (lambda (st) (M_state-declare-func-vars (funcInputs statement) (funcArgs (lookup (funcName statement))) st
-                                                                             (lambda (st2) (M_state-block (funcStatements (lookup (funcName statement))) st2
+      (else (M_state-add-frame state (lambda (st) (M_state-declare-func-vars (funcInputs statement) (funcArgs (lookup (funcName statement) st)) st
+                                                                             (lambda (st2) (M_state-block (funcStatements (lookup (funcName statement) st2)) st2
                                                                                                         (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                                                                         (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                                                         (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
@@ -207,7 +212,7 @@
       ((and (null? inputs) (null? args)) (next state))
       ((null? inputs) (error "Error: not enough inputs for function call."))
       ((null? args) (error "Error: more arguments than inputs for function call."))
-      (else (M_state-declare (buildDeclare (firstArg args) (firstInput)) state
+      (else (M_state-declare (buildDeclare (firstArg args) (firstInput inputs)) state
                              (lambda (s) (M_state-declare-func-vars (remainingInputs inputs) (remainingArgs args) s next throw)) throw)))))
 
 (define firstArg car)
