@@ -1,5 +1,5 @@
 ;EECS 345 Project 2
-;David Bauer dmb172 - M_value-funcall, M_state-funcall
+;David Bauer dmb172
 ;Ryan Nowacoski rmn36 - Boxes, interpret
 ; M_state-function
 
@@ -49,7 +49,7 @@
   (lambda (expression state return throw)
     (cond
       ((not (eq? (operator expression) 'funcall)) (error "Error: M_value-funcall called without function call."))
-      (else (M_state-funcall statement state
+      (else (M_state-funcall expression state
                              (lambda (s) (error "Error: non-returning function used as a value."))
                              baseBreak
                              baseContinue
@@ -352,7 +352,7 @@
 
 (define finally-return-continuation
   (lambda (finally state value next break continue throw return)
-    (M_state-finally finally state (lambda (s) (return v s)) break continue throw return)))
+    (M_state-finally finally state (lambda (s) (return value s)) break continue throw return)))
 
 (define M_state-while
   (lambda (statement state next break continue throw return)
