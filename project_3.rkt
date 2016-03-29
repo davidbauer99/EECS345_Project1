@@ -14,7 +14,7 @@
 (define interpret_parsed
   (lambda (statements state)
     (cond
-      ((null? statements) (M_state '(funcall main) state (lambda (s) (error "Error: Main did not return")) baseBreak baseContinue baseThrow baseReturn))
+      ((null? statements) (M_value '(funcall main) state baseThrow baseReturn))
       ((atom? state) state)
       (else (M_state (firstStatement statements) state
                      (lambda (s) (interpret_parsed (remaining statements) s))
@@ -26,7 +26,7 @@
 
 (define baseThrow (lambda (v s) (error 'error "Throw outside of try block")))
 
-(define baseReturn (lambda (v s) v))
+(define baseReturn (lambda (v) v))
 
 (define remaining cdr)
 
@@ -36,11 +36,11 @@
 (define M_value
   (lambda (expression state return throw)
     (cond
-      ((null? expression) (return '() state))
-      ((number? expression) (return expression state))
-      ((eq? 'true expression) (return #t state))
-      ((eq? 'false expression) (return #f state))
-      ((atom? expression) (return (lookup expression state) state)) 
+      ((null? expression) (return '()))
+      ((number? expression) (return expression))
+      ((eq? 'true expression) (return #t))
+      ((eq? 'false expression) (return #f))
+      ((atom? expression) (return (lookup expression state))) 
       ((member (operator expression) '(+ - * / %)) (M_value-arith expression state return throw))
       ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state return throw))
       ((eq? (operator expression) 'funcall) (M_value-funcall expression state return throw)))))
@@ -60,22 +60,22 @@
   (lambda (expression state return throw)
     (cond
       ((eq? '+ (operator expression)) (M_value (operand1 expression) state
-                                               (lambda (v1 s) (M_value (operand2 expression) s (lambda (v2 s2) (return (+ v1 v2) s2)) throw))
+                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (+ v1 v2))) throw))
                                                throw))
       ((eq? '- (operator expression)) (if (not (null? (cddr expression)))
-                                          (M_value (operand1 expression) state (lambda (v1 s) (M_value (operand2 expression) s
-                                                                                                      (lambda (v2 s2) (return (- v1 v2) s2))
+                                          (M_value (operand1 expression) state (lambda (v1) (M_value (operand2 expression) state
+                                                                                                      (lambda (v2) (return (- v1 v2)))
                                                                                                       throw))
                                                    throw)
-                                          (M_value (operand1 expression) state (lambda (v s) (return (- 0 v) s)) throw)))
+                                          (M_value (operand1 expression) state (lambda (v) (return (- 0 v))) throw)))
       ((eq? '* (operator expression)) (M_value (operand1 expression) state
-                                               (lambda (v1 s) (M_value (operand2 expression) s (lambda (v2 s2) (return (* v1 v2) s2)) throw))
+                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (* v1 v2))) throw))
                                                throw))
       ((eq? '/ (operator expression)) (M_value (operand1 expression) state
-                                               (lambda (v1 s) (M_value (operand2 expression) s (lambda (v2 s2) (return (/ v1 v2) s2)) throw))
+                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (/ v1 v2))) throw))
                                                throw))
       ((eq? '% (operator expression)) (M_value (operand1 expression) state
-                                               (lambda (v1 s) (M_value (operand2 expression) s (lambda (v2 s2) (return (remainder v1 v2) s2)) throw))
+                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (remainder v1 v2))) throw))
                                                throw))
       (else (error 'unknown "unknown expression")))))
 
@@ -86,37 +86,37 @@
         ((eq? 'false expression) (return #f state))
         ;TODO
         ((eq? '&& (operator expression)) (M_value (operand1 expression) state
-                                                  (lambda (v s) (M_value (operand2 expression) s
-                                                                         (lambda (v2 s2) (return (and v v2) s2)) throw))
+                                                  (lambda (v) (M_value (operand2 expression) state
+                                                                         (lambda (v2) (return (and v v2))) throw))
                                                   throw))
         ((eq? '|| (operator expression)) (M_value (operand1 expression) state
-                                                  (lambda (v s) (M_value (operand2 expression) s
-                                                                         (lambda (v2 s2) (return (or v v2) s2)) throw))
+                                                  (lambda (v) (M_value (operand2 expression) state
+                                                                         (lambda (v2) (return (or v v2))) throw))
                                                   throw))
-        ((eq? '! (operator expression)) (M_value (operand1 expression) state (lambda (v s) (return (not v) s)) throw))
+        ((eq? '! (operator expression)) (M_value (operand1 expression) state (lambda (v) (return (not v))) throw))
         ((eq? '< (operator expression)) (M_value (operand1 expression) state
-                                                  (lambda (v s) (M_value (operand2 expression) s
-                                                                         (lambda (v2 s2) (return (< v v2) s2)) throw))
+                                                  (lambda (v) (M_value (operand2 expression) state
+                                                                         (lambda (v2) (return (< v v2))) throw))
                                                   throw))
         ((eq? '> (operator expression)) (M_value (operand1 expression) state
-                                                  (lambda (v s) (M_value (operand2 expression) s
-                                                                         (lambda (v2 s2) (return (> v v2) s2)) throw))
+                                                  (lambda (v) (M_value (operand2 expression) state
+                                                                         (lambda (v2) (return (> v v2))) throw))
                                                   throw))
         ((eq? '<= (operator expression)) (M_value (operand1 expression) state
-                                                  (lambda (v s) (M_value (operand2 expression) s
-                                                                         (lambda (v2 s2) (return (<= v v2) s2)) throw))
+                                                  (lambda (v) (M_value (operand2 expression) state
+                                                                         (lambda (v2) (return (<= v v2))) throw))
                                                   throw))
         ((eq? '>= (operator expression)) (M_value (operand1 expression) state
-                                                  (lambda (v s) (M_value (operand2 expression) s
-                                                                         (lambda (v2 s2) (return (>= v v2) s2)) throw))
+                                                  (lambda (v) (M_value (operand2 expression) state
+                                                                         (lambda (v2) (return (>= v v2))) throw))
                                                   throw))
         ((eq? '== (operator expression)) (M_value (operand1 expression) state
-                                                  (lambda (v s) (M_value (operand2 expression) s
-                                                                         (lambda (v2 s2) (return (eq? v v2) s2)) throw))
+                                                  (lambda (v) (M_value (operand2 expression) state
+                                                                         (lambda (v2) (return (eq? v v2))) throw))
                                                   throw))
         ((eq? '!= (operator expression)) (M_value (operand1 expression) state
-                                                  (lambda (v s) (M_value (operand2 expression) s
-                                                                         (lambda (v2 s2) (return (not (eq? v v2)) s2)) throw))
+                                                  (lambda (v) (M_value (operand2 expression) state
+                                                                         (lambda (v2) (return (not (eq? v v2)))) throw))
                                                   throw))
         (else (error 'unknown "unknown expression")))))
 
@@ -129,7 +129,7 @@
 ;M_value-return will take a return statement and return the statement right of "return"
 (define M_value-return
   (lambda (expression state return throw)
-    (M_value (evaluatable expression) state (lambda (v s) (return (convert_value v) s)) throw)))
+    (M_value (evaluatable expression) state (lambda (v) (return (convert_value v))) throw)))
 
 (define evaluatable cadr)
 
@@ -158,7 +158,7 @@
       ((eq? 'return (operation statement)) (M_value-return statement state return throw))
       ((eq? 'if (operation statement)) (M_state-if statement state next break continue throw return))
       ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw return))
-      ((eq? 'funcall (operation statement)) (M_state-funcall statement state next baseBreak baseContinue throw (lambda (v s) (next s))))
+      ((eq? 'funcall (operation statement)) (M_state-funcall statement state next baseBreak baseContinue throw (lambda (v) (next state))))
       ((eq? 'function (operation statement)) (M_state-function statement state next break continue throw return))
       (else (error 'error "Unrecognized statement type.")))))
 
@@ -179,7 +179,7 @@
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                  (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))))))
+                                                                 return)))))))
 
 (define M_state-function
   (lambda (statement state next break continue throw return)
@@ -195,7 +195,7 @@
                                                                                                         (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                                                         (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                                                         (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                                                        (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2))))))
+                                                                                                        return))
                                                                              throw)))))))
 
 (define funcStatements cadr)
@@ -233,7 +233,7 @@
 
 (define M_state-throw
   (lambda (statement state throw)
-    (throw (M_value (throwVar statement) state (lambda (v s) v) throw) state)))
+    (M_value (throwVar statement) state (lambda (v) (throw v state)) throw)))
 
 (define M_state-break
   (lambda (statement state break)
@@ -254,14 +254,14 @@
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                  (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2))))))))
+                                                                 return))))
       ((null? (catchList statement))
        (M_state-add-frame state (lambda (st) (M_state-try-finally (tryBlock statement) (finallyStatements statement) st
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                  (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))) 
+                                                                 return)))) 
       (else
         (M_state-add-frame state (lambda (st) (M_state-try-catch-finally
                                                (tryBlock statement) (catchBlock statement) (finallyStatements statement) st
@@ -269,7 +269,7 @@
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                               (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))))))
+                                               return)))))))
 
 (define catchList caddr)
 
@@ -313,7 +313,7 @@
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
                    (lambda (v s) (finally-catch-throw-continuation catch v finally s next break continue throw return))
-                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
+                   return)))
 
 (define M_state-try-finally
   (lambda (try finally state next break continue throw return)
@@ -322,7 +322,7 @@
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
                    (lambda (v s) (finally-throw-continuation finally s v next break continue throw return))
-                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
+                   return)))
 
 (define M_state-finally
   (lambda (statements state next break continue throw return)
@@ -353,7 +353,7 @@
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
                    (lambda (v s) (M_state-finally finally s (lambda (s2) (throw v s2)) break continue throw return))
-                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
+                   (lambda (v) (finally-return-continuation finally state v next break continue throw return)))))
 
 (define finally-return-continuation
   (lambda (finally state value next break continue throw return)
@@ -361,21 +361,21 @@
 
 (define M_state-while
   (lambda (statement state next break continue throw return)
-    (if (M_value (GetCondition statement) state (lambda (v s) v) throw)
-        (M_state (GetStatement statement) state
-                 (lambda (s) (M_state-while statement s next break continue throw return))
-                 (lambda (s) (next s))
-                 (lambda (s) (M_state-while statement s next break continue throw return))
-                 throw
-                 return)
-        (next state))))
+    (M_value (GetCondition statement) state (lambda (v) (if v
+                                                            (M_state (GetStatement statement) state
+                                                                     (lambda (s) (M_state-while statement s next break continue throw return))
+                                                                     (lambda (s) (next s))
+                                                                     (lambda (s) (M_state-while statement s next break continue throw return))
+                                                                     throw
+                                                                     return)
+                                                            (next state))) throw)))
 
 (define GetStatement caddr)
 
 (define M_state-if
   (lambda (statement state next break continue throw return)
     (cond
-      ((M_value (GetCondition statement) state (lambda (v s) v) throw) (M_state (GetThenStatement statement) state next break continue throw return))
+      ((M_value (GetCondition statement) state (lambda (v) v) throw) (M_state (GetThenStatement statement) state next break continue throw return))
       ((not (null? (GetOptElse statement))) (M_state (GetOptElse statement) state next break continue throw return))
       (else (next state)))))
 
@@ -401,9 +401,9 @@
   (lambda (statement state next throw)
     (cond
       ((not (eq? 'var (operation statement))) (error 'illegal "Declaration statment does not start with 'var'"))
-      ((null? (declare-value-list statement)) (next (declare_var (declare-var-name statement) state)))
-      (else (M_value (declare-val statement) (declare_var (declare-var-name statement) state)
-                     (lambda (v s) (update_state (declare-var-name statement) v s (lambda (s2) (next s2)))) throw)))))
+      ((null? (declare-value-list statement)) (declare_var (declare-var-name statement) state (lambda (s) (next s))))
+      (else (declare_var (declare-var-name statement) state (lambda (s) (M_value (declare-val statement) s
+                                                                                 (lambda (v) (update_state (declare-var-name statement) v s (lambda (s2) (next s2)))) throw)))))))
 
 (define declare-value-list cddr)
 
@@ -417,7 +417,7 @@
     (cond
       ((not (eq? '= (operation statement))) (error 'illegal "Assignment statement does not start with '='"))
       (else (M_value (assign-expression statement) state
-                     (lambda (v s) (update_state (assign-var statement) v s (lambda (s2) (next s2)))) throw)))))
+                     (lambda (v) (update_state (assign-var statement) v state (lambda (s2) (next s2)))) throw)))))
 
 (define operation car)
 
@@ -458,18 +458,17 @@
 
 ; declare_var adds a new variable to the state with 'undefined as its initial value
 (define declare_var
-  (lambda (name state)
+  (lambda (name state cps)
     (cond
-      ((null? state) 'undefined)
+      ((null? state) (cps 'undefined))
       ((contains? name (variableList state)) (error 'error "Duplicate delcaration of variable."))
-      (else (cons (cons (cons name (firstVariableFrame state)) (restOfVariableFrames state)) (list (cons (cons (box 'undefined) (firstValueFrame state)) (restOfValueFrames state))))))))
+      (else (cps (cons (cons (cons name (firstVariableFrame state)) (restOfVariableFrames state)) (list (cons (cons (box 'undefined) (firstValueFrame state)) (restOfValueFrames state)))))))))
 
 (define contains?
   (lambda (v l)
     (cond
       ((null? l) #f)
-      ((eq? v (unbox (frontOfList l))) #t)
-      ((list? (frontOfList l)) (or (contains? v (frontOfList l)) (contains? v (restOfList l))))
+      ((eq? v (frontOfList l)) #t)
       (else (contains? v (restOfList l))))))
 
 (define frontOfList car)
@@ -494,10 +493,12 @@
     (cond
       ((null? state) 'undefined)
       ((null? (variableList state)) (error 'undefined "Attempting to assign an undeclared variable."))
-      ((eq? name (caar state)) (set-box! (firstValueFrame state) value))
+      ((eq? name (caar state)) (cons (variables state) (list (cons (begin (set-box! (firstValFromFrame state) value) (firstValFromFrame state)) (remaining_values state)))))
       (else ((lambda (newState)
                (cons (cons (caar state) (variables newState)) (list (cons (caadr state) (state_values newState)))))
              (update_state_frame name value (cons (remaining_variables state) (list (remaining_values state)))))))))
+
+(define firstValFromFrame caadr)
 
 (define update_state
   (lambda (name value state return)
