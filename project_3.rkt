@@ -83,7 +83,6 @@
       (cond
         ((eq? 'true expression) (return #t state))
         ((eq? 'false expression) (return #f state))
-        ;TODO
         ((eq? '&& (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
                                                                          (lambda (v2) (return (and v v2))) throw))
@@ -182,7 +181,11 @@
 
 (define M_state-function
   (lambda (statement state next break continue throw return)
-    (declare_var (cadr statement) state (lambda (s) (update_state (cadr statement) (cddr statement) s (lambda (s2) (next s2)))))))
+    (declare_var (var-name statement) state (lambda (s) (update_state (var-name statement) (var-value statement) s (lambda (s2) (next s2)))))))
+
+(define var-name cadr)
+
+(define var-value cddr)
 
 (define M_state-funcall
   (lambda (statement state next break continue throw return)
@@ -209,7 +212,7 @@
   (lambda (inputs state throw cps)
     (if (null? inputs)
         (cps '())
-        (M_value (car inputs) state (lambda (v) (M_value-arg-list (cdr inputs) state throw (lambda (v2) (cps (cons v v2))))) throw))))
+        (M_value (firstInput inputs) state (lambda (v) (M_value-arg-list (remainingInputs inputs) state throw (lambda (v2) (cps (cons v v2))))) throw))))
 
 (define funcStatements cadr)
 
@@ -506,12 +509,14 @@
     (cond
       ((null? state) 'undefined)
       ((null? (variableList state)) (error 'undefined "Attempting to assign an undeclared variable."))
-      ((eq? name (caar state)) (cons (variables state) (list (cons (begin (set-box! (firstValFromFrame state) value) (firstValFromFrame state)) (remaining_values state)))))
+      ((eq? name (firstNameFromFrame state)) (cons (variables state) (list (cons (begin (set-box! (firstValFromFrame state) value) (firstValFromFrame state)) (remaining_values state)))))
       (else ((lambda (newState)
-               (cons (cons (caar state) (variables newState)) (list (cons (caadr state) (state_values newState)))))
+               (cons (cons (firstNameFromFrame state) (variables newState)) (list (cons (firstValFromFrame state) (state_values newState)))))
              (update_state_frame name value (cons (remaining_variables state) (list (remaining_values state)))))))))
 
 (define firstValFromFrame caadr)
+
+(define firstNameFromFrame caar)
 
 (define update_state
   (lambda (name value state return)
