@@ -494,7 +494,7 @@
     (cond
       ((null? state) 'undefined)
       ((null? (variableList state)) (error 'undefined "Attempting to assign an undeclared variable."))
-      ((eq? name (caar state)) (cons (variables state) (list (cons value (remaining_values state)))))
+      ((eq? name (caar state)) (set-box! (firstValueFrame state) value))
       (else ((lambda (newState)
                (cons (cons (caar state) (variables newState)) (list (cons (caadr state) (state_values newState)))))
              (update_state_frame name value (cons (remaining_variables state) (list (remaining_values state)))))))))
