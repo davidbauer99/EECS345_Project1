@@ -1,10 +1,8 @@
 ;EECS 345 Project 2
 ;David Bauer dmb172
-;Ryan Nowacoski rmn36 - Boxes, interpret
-; M_state-function
+;Ryan Nowacoski rmn36
 
 ;Load the parser
-;(load "simpleParser.scm")
 (load "functionParser.scm")
 
 (define interpret
@@ -14,7 +12,7 @@
 (define interpret_parsed
   (lambda (statements state)
     (cond
-      ((null? statements) (M_value '(funcall main) state baseThrow baseReturn))
+      ((null? statements) (M_value '(funcall main) state baseReturn baseThrow))
       ((atom? state) state)
       (else (M_state (firstStatement statements) state
                      (lambda (s) (interpret_parsed (remaining statements) s))
@@ -24,7 +22,7 @@
 
 (define baseContinue (lambda (s) (error 'error "Continue outside of block")))
 
-(define baseThrow (lambda (v s) (error 'error "Throw outside of try block")))
+(define baseThrow (lambda (v) (error 'error "Throw outside of try block")))
 
 (define baseReturn (lambda (v) v))
 
@@ -38,6 +36,7 @@
     (cond
       ((null? expression) (return '()))
       ((number? expression) (return expression))
+      ((boolean? expression) (return expression))
       ((eq? 'true expression) (return #t))
       ((eq? 'false expression) (return #f))
       ((atom? expression) (return (lookup expression state))) 
@@ -178,25 +177,39 @@
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
+                                                                 throw
                                                                  return)))))))
 
 (define M_state-function
   (lambda (statement state next break continue throw return)
-    (update_state (cadr statement) (cddr statement) (declare_var (cadr statement) state) (lambda (s) (next s)))))
+    (declare_var (cadr statement) state (lambda (s) (update_state (cadr statement) (cddr statement) s (lambda (s2) (next s2)))))))
 
 (define M_state-funcall
   (lambda (statement state next break continue throw return)
     (cond
       ((not (eq? (car statement) 'funcall)) (error 'error "Function evaluation without 'funcall' at the beginning."))
-      (else (M_state-add-frame state (lambda (st) (M_state-declare-func-vars (funcInputs statement) (funcArgs (lookup (funcName statement) st)) st
-                                                                             (lambda (st2) (M_state-block (funcStatements (lookup (funcName statement) st2)) st2
-                                                                                                        (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
-                                                                                                        (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
-                                                                                                        (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                                                                                        (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                                                        return))
-                                                                             throw)))))))
+      (else (M_value-arg-list (funcInputs statement) state throw
+                              (lambda (v) (GenEnvForFunc (funcName statement) state
+                                                         (lambda (s) (M_state-add-frame s (lambda (s2) (M_state-declare-func-vars v (funcArgs (lookup (funcName statement) s2)) s2
+                                                                                                (lambda (st) (M_state-block (funcStatements (lookup (funcName statement) st)) st
+                                                                                                                            (lambda (s4) (next state))
+                                                                                                                            baseBreak
+                                                                                                                            baseContinue
+                                                                                                                            throw
+                                                                                                                            return))
+                                                                                                throw)))))))))))
+
+(define GenEnvForFunc
+  (lambda (name state next)
+    (if (contains? name (firstVariableFrame state))
+        (next state)
+        (GenEnvForFunc name (cons (restOfVariableFrames state) (list (restOfValueFrames state))) next))))
+
+(define M_value-arg-list
+  (lambda (inputs state throw cps)
+    (if (null? inputs)
+        (cps '())
+        (M_value (car inputs) state (lambda (v) (M_value-arg-list (cdr inputs) state throw (lambda (v2) (cps (cons v v2))))) throw))))
 
 (define funcStatements cadr)
 
@@ -233,7 +246,7 @@
 
 (define M_state-throw
   (lambda (statement state throw)
-    (M_value (throwVar statement) state (lambda (v) (throw v state)) throw)))
+    (M_value (throwVar statement) state (lambda (v) (throw v)) throw)))
 
 (define M_state-break
   (lambda (statement state break)
@@ -253,14 +266,14 @@
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
+                                                                 throw
                                                                  return))))
       ((null? (catchList statement))
        (M_state-add-frame state (lambda (st) (M_state-try-finally (tryBlock statement) (finallyStatements statement) st
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
+                                                                 throw
                                                                  return)))) 
       (else
         (M_state-add-frame state (lambda (st) (M_state-try-catch-finally
@@ -268,7 +281,7 @@
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                               (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
+                                               throw
                                                return)))))))
 
 (define catchList caddr)
@@ -286,7 +299,7 @@
 (define M_state-try-catch
   (lambda (try catch state next break continue throw return)
     (M_state-block try state next break continue
-                   (lambda (v s) (M_state-catch catch v s next break continue throw return)) return)))
+                   (lambda (v) (M_state-catch catch v state next break continue throw return)) return)))
 
 (define M_state-catch
   (lambda (catch value state next break continue throw return)
@@ -312,7 +325,7 @@
                    (lambda (s) (finally-next-continuation finally s next break continue throw return))
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v s) (finally-catch-throw-continuation catch v finally s next break continue throw return))
+                   (lambda (v) (finally-catch-throw-continuation catch v finally state next break continue throw return))
                    return)))
 
 (define M_state-try-finally
@@ -321,7 +334,7 @@
                    (lambda (s) (finally-next-continuation finally s next break continue throw return))
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v s) (finally-throw-continuation finally s v next break continue throw return))
+                   (lambda (v) (finally-throw-continuation finally state v next break continue throw return))
                    return)))
 
 (define M_state-finally
@@ -344,7 +357,7 @@
 
 (define finally-throw-continuation
   (lambda (finally state value next break continue throw return)
-    (M_state-finally finally state (lambda (s) (throw value s)) break continue throw return)))
+    (M_state-finally finally state (lambda (s) (throw value)) break continue throw return)))
 
 (define finally-catch-throw-continuation
   (lambda (catch value finally state next break continue throw return)
@@ -352,7 +365,7 @@
                    (lambda (s) (finally-next-continuation finally s next break continue throw return))
                    (lambda (s) (finally-break-continuation finally s next break continue throw return))
                    (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v s) (M_state-finally finally s (lambda (s2) (throw v s2)) break continue throw return))
+                   (lambda (v) (M_state-finally finally state (lambda (s2) (throw v)) break continue throw return))
                    (lambda (v) (finally-return-continuation finally state v next break continue throw return)))))
 
 (define finally-return-continuation
