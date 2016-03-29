@@ -432,8 +432,8 @@
       ((null? state) 'undefined)
       ((empty?  (variables state)) (error 'error "Using variable before it is assigned."))
       ((empty?  (firstVariableFrame state)) (lookup name (cons (remaining_variables state) (list (remaining_values state)))))
-      ((and (eq? name (first_variable state)) (eq? 'undefined (unbox (first_value state)))) (error 'error "Using variable before it is assigned."))
-      ((eq? name (first_variable state)) (unbox (first_value state)))
+      ((and (eq? name (first_variable state)) (eq? 'undefined (first_value state))) (error 'error "Using variable before it is assigned."))
+      ((eq? name (first_variable state)) (first_value state))
       (else (lookup name (cons (cons (rest_of_first_varframe state) (restOfVariableFrames state)) (list (cons (rest_of_first_valframe state) (restOfValueFrames state)))))))))
               
 (define variables car)
@@ -462,13 +462,13 @@
     (cond
       ((null? state) 'undefined)
       ((contains? name (variableList state)) (error 'error "Duplicate delcaration of variable."))
-      (else (cons (cons (cons name (firstVariableFrame state)) (restOfVariableFrames state)) (list (cons (cons (box 'undefined) (firstValueFrame state)) (restOfValueFrames state))))))))
+      (else (cons (cons (cons name (firstVariableFrame state)) (restOfVariableFrames state)) (list (cons (cons 'undefined (firstValueFrame state)) (restOfValueFrames state))))))))
 
 (define contains?
   (lambda (v l)
     (cond
       ((null? l) #f)
-      ((eq? v (unbox (frontOfList l))) #t)
+      ((eq? v (frontOfList l)) #t)
       ((list? (frontOfList l)) (or (contains? v (frontOfList l)) (contains? v (restOfList l))))
       (else (contains? v (restOfList l))))))
 
