@@ -3,7 +3,7 @@
 ;Ryan Nowacoski rmn36
 
 ;Load the parser
-(load "functionParser.scm")
+(load "classParser.scm")
 
 (define interpret
   (lambda (f)
@@ -27,7 +27,7 @@
 (define baseReturn (lambda (v) v))
 
 (define remaining cdr)
-
+ 
 (define firstStatement car)
 
 ;;;;;;;;;;;;;;;;; M_value functions ;;;;;;;;;;;;;;;;;;
@@ -157,8 +157,31 @@
       ((eq? 'if (operation statement)) (M_state-if statement state next break continue throw return))
       ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw return))
       ((eq? 'funcall (operation statement)) (M_state-funcall statement state next baseBreak baseContinue throw (lambda (v) (next state))))
-      ((eq? 'function (operation statement)) (M_state-function statement state next break continue throw return))
+      ((eq? 'function (operation statement)) (M_state-function statement state next))
+      ((eq? 'class (operation statement)) (M_state-class statement state next))
       (else (error 'error "Unrecognized statement type.")))))
+
+(define M_state-class
+  (lambda (statement state next)
+    (cond
+      ((not (eq? (car statement) 'class)) (error 'error "Class definition without 'class' at beginning."))
+      (else (declare_var (class-name statement) state (lambda (s) (buildClassBody (body statement) (lambda (s2) (update_state (class-name statement) s2 s (lambda (s3) (next s3)))))))))))                                                        
+
+(define body cddr)
+
+(define buildClassBody
+  (lambda (body return)
+    (cond
+      ((null? body) (return '(((()) (())) ((()) (())))))
+      ((eq? (car body) '()) (buildClassBody (cadr body) (lambda (v) (return (cons '() v)))))
+      ((eq? (caar body) 'extends) (buildClassBody (cadr body) (lambda (v) (return (cons (superName body) v)))))
+      ((eq? (caar body) 'var) (buildClassBody (cdr body) (lambda (v) (declare_var (cadar body) (car v) (lambda (s) (update_state (cadar body) (caddar body) s (lambda (s2) (return (cons s2 (cdr v))))))))))
+      ((eq? (caar body) 'function) (buildClassBody (cdr body) (lambda (v) (M_state-function (car body) (cadr v) (lambda (s) (return (cons (car v) (list s))))))))
+      ((eq? (caar body) 'static-function) (buildClassBody (cdr body) (lambda (v) (M_state-function (car body) (cadr v) (lambda (s) (return (cons (car v) (list s)))))))))))
+
+(define superName cadar)
+
+(define class-name cadr)
 
 (define M_state-add-frame
   (lambda (state next)
@@ -180,7 +203,7 @@
                                                                  return)))))))
 
 (define M_state-function
-  (lambda (statement state next break continue throw return)
+  (lambda (statement state next)
     (declare_var (var-name statement) state (lambda (s) (update_state (var-name statement) (var-value statement) s (lambda (s2) (next s2)))))))
 
 (define var-name cadr)
