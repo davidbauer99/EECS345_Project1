@@ -3,19 +3,20 @@
 ;Ryan Nowacoski rmn36
 
 ;Load the parser
+;(load "functionParser.scm")
 (load "classParser.scm")
 
 (define interpret
-  (lambda (f c)
-    (interpret_parsed (parser f) '((()) (())) c)))
+  (lambda (f)
+    (interpret_parsed (parser f) '((()) (())))))
 
 (define interpret_parsed
-  (lambda (statements state c)
+  (lambda (statements state)
     (cond
-      ((null? statements) (M_state-add-frame state (lambda (v) (M_state-block (getMainStatements state c) v (lambda (v2) (error 'error "No return in main.")) baseBreak baseContinue baseThrow baseReturn))))
+      ((null? statements) (M_value '(funcall main) state baseReturn baseThrow))
       ((atom? state) state)
       (else (M_state (firstStatement statements) state
-                     (lambda (s) (interpret_parsed (remaining statements) s c))
+                     (lambda (s) (interpret_parsed (remaining statements) s))
                      baseBreak baseContinue baseThrow baseReturn)))))
 
 (define baseBreak (lambda (s) (error 'error "Break outside of block")))
@@ -27,14 +28,8 @@
 (define baseReturn (lambda (v) v))
 
 (define remaining cdr)
- 
-(define firstStatement car)
 
-(define getMainStatements
-  (lambda (state class)
-    (if (eq? (lookup class state) 'undefined)
-        (error 'error "Specified class is not defined.")
-        (cadr (lookup 'main (caddr (lookup class state)))))))
+(define firstStatement car)
 
 ;;;;;;;;;;;;;;;;; M_value functions ;;;;;;;;;;;;;;;;;;
 (define M_value
@@ -48,8 +43,7 @@
       ((atom? expression) (return (lookup expression state))) 
       ((member (operator expression) '(+ - * / %)) (M_value-arith expression state return throw))
       ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state return throw))
-      ((eq? (operator expression) 'funcall) (M_value-funcall expression state return throw))
-      ((eq? (operator expression) 'new) (M_value-new expression state return)))))
+      ((eq? (operator expression) 'funcall) (M_value-funcall expression state return throw)))))
 
 (define M_value-funcall
   (lambda (expression state return throw)
@@ -125,33 +119,6 @@
                                                   throw))
         (else (error 'unknown "unknown expression")))))
 
-(define M_value-new
-  (lambda (expression state return)
-    (cond
-      ((not (eq? (operator expression) 'new)) (error 'error "No new operator."))
-      (else (copyFields (lookup (className expression) state) (lambda (v) (return (cons (className expression) v))))))))
-
-(define className cadr)
-
-(define copyFields
-  (lambda (class return)
-    (cond
-      ((null? class) (error 'error "No class def found."))
-      ((not (null? (superType class))) ) ;TODO
-      (else (copyOf (classFieldList class) (lambda (v) (return v)))))))
-
-(define classFieldList cadr)
-
-(define superType car)
-
-(define copyOf
-  (lambda (fields return)
-    (cond
-      ((null? fields) (error 'error "No fields found."))
-      ((null? (caar fields)) (return '((()) (()))))
-      (else (copyOf (cons (list (cdaar fields)) (list (list (cdaadr fields)))) (lambda (v) (declare_var (caaar fields) v (lambda (v2) (update_state (caaar fields) (unbox (caaadr fields)) v2 (lambda (v3) (return v3)))))))))))
-                                                                              ;(declare_var (fieldDecName body) (classVars v) (lambda (s) (update_state (fieldDecName body) (fieldDecVal body) s (lambda (s2) (return (cons s2 (funcVals v))))))))))
-             
 (define operator car)
 
 (define operand1 cadr)
@@ -191,49 +158,14 @@
       ((eq? 'if (operation statement)) (M_state-if statement state next break continue throw return))
       ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw return))
       ((eq? 'funcall (operation statement)) (M_state-funcall statement state next baseBreak baseContinue throw (lambda (v) (next state))))
-      ((eq? 'function (operation statement)) (M_state-function statement state next))
-      ((eq? 'class (operation statement)) (M_state-class statement state next))
+      ((eq? 'function (operation statement)) (M_state-function statement state next break continue throw return))
       (else (error 'error "Unrecognized statement type.")))))
 
-(define M_state-class
-  (lambda (statement state next)
-    (cond
-      ((not (eq? (car statement) 'class)) (error 'error "Class definition without 'class' at beginning."))
-      (else (declare_var (class-name statement) state (lambda (s) (buildClassBody (body statement) (lambda (s2) (update_state (class-name statement) s2 s (lambda (s3) (next s3)))))))))))                                                        
-
-(define body cddr)
-
-(define buildClassBody
-  (lambda (body return)
-    (cond
-      ((null? body) (return '(((()) (())) ((()) (())))))
-      ((eq? (firstElem body) '()) (buildClassBody (elemAfterSuper body) (lambda (v) (return (cons '() v)))))
-      ((eq? (firstOperation body) 'extends) (buildClassBody (elemAfterSuper body) (lambda (v) (return (cons (superName body) v)))))
-      ((and (eq? (firstOperation body) 'var) (not (null? (cddar body)))) (buildClassBody (remainingBody body) (lambda (v) (declare_var (fieldDecName body) (classVars v) (lambda (s) (update_state (fieldDecName body) (fieldDecVal body) s (lambda (s2) (return (cons s2 (funcVals v))))))))))
-      ((eq? (firstOperation body) 'function) (buildClassBody (remainingBody body) (lambda (v) (M_state-function (firstElem body) (fieldVals v) (lambda (s) (return (cons (classVars v) (list s))))))))
-      ((eq? (firstOperation body) 'static-function) (buildClassBody (remainingBody body) (lambda (v) (M_state-function (firstElem body) (fieldVals v) (lambda (s) (return (cons (classVars v) (list s)))))))))))
-
-(define classVars car)
-
-(define funcVals cdr)
-
-(define fieldVals cadr)
-
-(define fieldDecName cadar)
-
-(define fieldDecVal caddar)
-
-(define firstElem car)
-
-(define elemAfterSuper cadr)
-
-(define firstOperation caar)
-
-(define remainingBody cdr)
-
-(define superName cadar)
-
-(define class-name cadr)
+;(define M_state-class
+;  (lambda (statement state)
+;    (cond
+;      ((not (eq? (car statement))) (error 'error "Class definition without 'class' at beginning."))
+;      (
 
 (define M_state-add-frame
   (lambda (state next)
@@ -255,7 +187,7 @@
                                                                  return)))))))
 
 (define M_state-function
-  (lambda (statement state next)
+  (lambda (statement state next break continue throw return)
     (declare_var (var-name statement) state (lambda (s) (update_state (var-name statement) (var-value statement) s (lambda (s2) (next s2)))))))
 
 (define var-name cadr)
