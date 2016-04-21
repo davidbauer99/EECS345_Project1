@@ -2,6 +2,10 @@
 ;David Bauer dmb172
 ;Ryan Nowacoski rmn36
 
+;Class defs in base level of state
+;Class declaration ({super/()} (((varnames)) ((varvals))) (((funcnames)) ((funcvals))))
+;Instance format   (class (((varframes)(supervars))) ((valframes)(supervals)))
+
 ;Load the parser
 (load "classParser.scm")
 
