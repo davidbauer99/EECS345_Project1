@@ -270,24 +270,34 @@
   (lambda (statement state next break continue throw return class this)
     (cond
       ((not (eq? (car statement) 'funcall)) (error 'error "Function evaluation without 'funcall' at the beginning."))
-      (else (M_object (cadr statement) state (lambda (oc) (M_value-arg-list (funcInputs statement) state throw
-                              (lambda (v) (GenEnvForFunc (funcName (cadr statement)) state
-                                                         (lambda (s) (M_state-add-frame s (lambda (s2) (M_state-declare-func-vars v (funcArgs (lookup (funcName (cadr statement)) (caddr (GetFuncClass (funcName (cadr statement)) (car oc) s2)))) s2
-                                                                                                (lambda (st) (M_state-block (funcStatements (lookup (funcName (cadr statement))
-                                                                                                                                                    (caddr (GetFuncClass (funcName (cadr statement)) (car oc) st)))) st
+      (else (M_object (objexp statement) state (lambda (oc) (M_value-arg-list (funcInputs statement) state throw
+                              (lambda (v) (GenEnvForFunc (funcName (objexp statement)) state
+                                                         (lambda (s) (M_state-add-frame s (lambda (s2) (M_state-declare-func-vars v (funcArgs (lookup (funcName (objexp statement)) (classFuncs (GetFuncClass (funcName (objexp statement)) (getClass oc) s2)))) s2
+                                                                                                (lambda (st) (M_state-block (funcStatements (lookup (funcName (objexp statement))
+                                                                                                                                                    (classFuncs (GetFuncClass (funcName (objexp statement)) (getClass oc) st)))) st
                                                                                                                             (lambda (s4) (next state))
                                                                                                                             baseBreak
                                                                                                                             baseContinue
                                                                                                                             throw
-                                                                                                                            return (GetFuncClassName (funcName (cadr statement)) (car oc) state) (cdr oc)))
+                                                                                                                            return (GetFuncClassName (funcName (objexp statement)) (getClass oc) state) (getInst oc)))
                                                                                                 throw class this)))) class this)) class this)) throw class this)))))
+
+(define objexp cadr)
+
+(define classFuncs caddr)
+
+(define getClass car)
+
+(define getInst cdr)
 
 (define GenEnvForFunc
   (lambda (name state next class this)
     (cond
-      ((null? (cdar state)) (next state))
+      ((null? (nextFrame state)) (next state))
       ((contains? name (firstVariableFrame state)) (next state))
       (else (GenEnvForFunc name (cons (restOfVariableFrames state) (list (restOfValueFrames state))) next class this)))))
+
+(define nextFrame cdar)
 
 (define M_value-arg-list
   (lambda (inputs state throw cps class this)
@@ -301,7 +311,9 @@
   (lambda (func)
     (cond
       ((atom? func) func)
-      (else (caddr func)))))
+      (else (nameElem func)))))
+
+(define nameElem caddr)
 
 (define funcInputs cddr)
 
@@ -484,33 +496,43 @@
 (define M_object
   (lambda (objexp state return throw class this)
     (cond
-      ((eq? objexp 'super) (M_object-super objexp state return throw class this))
-      ((eq? objexp 'this) (return (cons class this)))
-      ((not (pair? objexp)) (return (cons class this)))
-      (else (M_value (cadr objexp) state (lambda (v) (if (obj? v)
-                                                  (return (cons (car v) v))
+      ((not (pair? objexp)) (return (cons (car this) this)))
+      ((eq? (obj objexp) 'super) (M_object-super objexp state return throw class this))
+      ((eq? (obj objexp) 'this) (return (cons (classFromInst this) this)))
+      (else (M_value (obj objexp) state (lambda (v) (if (obj? v)
+                                                  (return (cons (classFromInst v) v))
                                                   (error 'error "Function call on non-object.")))
                      throw class this)))))
 
+(define obj cadr)
+
+(define classFromInst car)
+
 (define obj?
-  (lambda (obj)
+  (lambda (ob)
     (cond
-      ((not (pair? obj)) #f)
+      ((not (pair? ob)) #f)
       (else #t))))
 
 (define GetFuncClass
   (lambda (f class state)
     (cond
       ((null? class) (error 'error "Function not defined."))
-      ((contains? f (car (caaddr (lookup class state)))) (lookup class state))
-      (else (GetFuncClass f (car (lookup class state)) state)))))
+      ((contains? f (classFuncFrame (classFuncState (lookup class state)))) (lookup class state))
+      (else (GetFuncClass f (superTypeName (lookup class state)) state)))))
+
+(define classFuncState caaddr)
+
+(define classFuncFrame car)
+
+(define superTypeName car)
 
 (define GetFuncClassName
   (lambda (f class state)
     (cond
       ((null? class) (error 'error "Function not defined."))
-      ((contains? f (car (caaddr (lookup class state)))) class)
-      (else (GetFuncClass f (car (lookup class state)) state)))))
+      ((contains? f (classFuncFrame (classFuncState (lookup class state)))) class)
+      (else (GetFuncClass f (superTypeName (lookup class state)) state)))))
 
 ;Helper for if statement to get the first condition
 (define GetCondition cadr)
