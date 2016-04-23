@@ -4,7 +4,11 @@
 
 ;Class defs in base level of state
 ;Class declaration ({super/()} (((varnames)) ((varvals))) (((funcnames)) ((funcvals))))
-;Instance format   (class (((varframes)(supervars))) ((valframes)(supervals)))
+;Instance format   (class (vars in reverse order))
+
+;For looking up fields, use the number of elements from the end to find the var in the instance
+; for example Class A has fields (a b) with initial values (1 2) they're stored in an instance as
+; (2 1) so b is 0 from the end so it is the element at the 0 index in the instance... Will probably need helper functions
 
 ;Load the parser
 (load "classParser.scm")
@@ -133,7 +137,7 @@
   (lambda (expression state return class this)
     (cond
       ((not (eq? (operator expression) 'new)) (error 'error "No new operator."))
-      (else (copyFields (lookup (className expression) state) (lambda (v) (return (cons (className expression) v))))))))
+      (else (copyFields (lookup (className expression) state) (lambda (v) (return (cons (className expression) (list v)))))))))
 
 (define className cadr)
 
@@ -144,17 +148,18 @@
       ((not (null? (superType class))) ) ;TODO
       (else (copyOf (classFieldList class) (lambda (v) (return v)))))))
 
-(define classFieldList cadr)
+(define classFieldList
+  (lambda (l)
+    (car (cadadr l))))
+  
 
 (define superType car)
 
 (define copyOf
   (lambda (fields return)
     (cond
-      ((null? fields) (error 'error "No fields found."))
-      ((null? (caar fields)) (return '((()) (()))))
-      (else (copyOf (cons (list (cdaar fields)) (list (list (cdaadr fields)))) (lambda (v) (declare_var (caaar fields) v (lambda (v2) (update_state (caaar fields) (unbox (caaadr fields)) v2 (lambda (v3) (return v3)))))))))))
-                                                                              ;(declare_var (fieldDecName body) (classVars v) (lambda (s) (update_state (fieldDecName body) (fieldDecVal body) s (lambda (s2) (return (cons s2 (funcVals v))))))))))
+      ((null? fields) (return '()))
+      (else (copyOf (cdr fields) (lambda (v) (return (append v (list (box (unbox (car fields))))))))))))
              
 (define operator car)
 
