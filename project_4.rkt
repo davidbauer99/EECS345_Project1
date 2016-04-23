@@ -16,11 +16,11 @@
 (define interpret_parsed
   (lambda (statements state c)
     (cond
-      ((null? statements) (M_state-add-frame state (lambda (v) (M_state-block (getMainStatements state c) v (lambda (v2) (error 'error "No return in main.")) baseBreak baseContinue baseThrow baseReturn))))
+      ((null? statements) (M_state-add-frame state (lambda (v) (M_state-block (getMainStatements state c) v (lambda (v2) (error 'error "No return in main.")) baseBreak baseContinue baseThrow baseReturn () ()))))
       ((atom? state) state)
       (else (M_state (firstStatement statements) state
                      (lambda (s) (interpret_parsed (remaining statements) s c))
-                     baseBreak baseContinue baseThrow baseReturn)))))
+                     baseBreak baseContinue baseThrow baseReturn () ())))))
 
 (define baseBreak (lambda (s) (error 'error "Break outside of block")))
 
@@ -42,7 +42,7 @@
 
 ;;;;;;;;;;;;;;;;; M_value functions ;;;;;;;;;;;;;;;;;;
 (define M_value
-  (lambda (expression state return throw)
+  (lambda (expression state return throw class this)
     (cond
       ((null? expression) (return '()))
       ((number? expression) (return expression))
@@ -50,13 +50,13 @@
       ((eq? 'true expression) (return #t))
       ((eq? 'false expression) (return #f))
       ((atom? expression) (return (lookup expression state))) 
-      ((member (operator expression) '(+ - * / %)) (M_value-arith expression state return throw))
-      ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state return throw))
-      ((eq? (operator expression) 'funcall) (M_value-funcall expression state return throw))
-      ((eq? (operator expression) 'new) (M_value-new expression state return)))))
+      ((member (operator expression) '(+ - * / %)) (M_value-arith expression state return throw class this))
+      ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state return throw class this))
+      ((eq? (operator expression) 'funcall) (M_value-funcall expression state return throw class this))
+      ((eq? (operator expression) 'new) (M_value-new expression state return class this)))))
 
 (define M_value-funcall
-  (lambda (expression state return throw)
+  (lambda (expression state return throw class this)
     (cond
       ((not (eq? (operator expression) 'funcall)) (error "Error: M_value-funcall called without function call."))
       (else (M_state-funcall expression state
@@ -64,73 +64,73 @@
                              baseBreak
                              baseContinue
                              throw
-                             return)))))
+                             return class this)))))
 
 (define M_value-arith
-  (lambda (expression state return throw)
+  (lambda (expression state return throw class this)
     (cond
       ((eq? '+ (operator expression)) (M_value (operand1 expression) state
-                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (+ v1 v2))) throw))
-                                               throw))
+                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (+ v1 v2))) throw class this))
+                                               throw class this))
       ((eq? '- (operator expression)) (if (not (null? (cddr expression)))
                                           (M_value (operand1 expression) state (lambda (v1) (M_value (operand2 expression) state
                                                                                                       (lambda (v2) (return (- v1 v2)))
-                                                                                                      throw))
+                                                                                                      throw class this))
                                                    throw)
-                                          (M_value (operand1 expression) state (lambda (v) (return (- 0 v))) throw)))
+                                          (M_value (operand1 expression) state (lambda (v) (return (- 0 v))) throw class this)))
       ((eq? '* (operator expression)) (M_value (operand1 expression) state
-                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (* v1 v2))) throw))
-                                               throw))
+                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (* v1 v2))) throw class this))
+                                               throw class this))
       ((eq? '/ (operator expression)) (M_value (operand1 expression) state
-                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (/ v1 v2))) throw))
-                                               throw))
+                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (/ v1 v2))) throw class this))
+                                               throw class this))
       ((eq? '% (operator expression)) (M_value (operand1 expression) state
-                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (remainder v1 v2))) throw))
-                                               throw))
+                                               (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (remainder v1 v2))) throw class this))
+                                               throw class this))
       (else (error 'unknown "unknown expression")))))
 
 (define M_value-boolean
-  (lambda (expression state return throw)
+  (lambda (expression state return throw class this)
       (cond
         ((eq? 'true expression) (return #t state))
         ((eq? 'false expression) (return #f state))
         ((eq? '&& (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
-                                                                         (lambda (v2) (return (and v v2))) throw))
-                                                  throw))
+                                                                         (lambda (v2) (return (and v v2))) throw class this))
+                                                  throw class this))
         ((eq? '|| (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
-                                                                         (lambda (v2) (return (or v v2))) throw))
-                                                  throw))
-        ((eq? '! (operator expression)) (M_value (operand1 expression) state (lambda (v) (return (not v))) throw))
+                                                                         (lambda (v2) (return (or v v2))) throw class this))
+                                                  throw class this))
+        ((eq? '! (operator expression)) (M_value (operand1 expression) state (lambda (v) (return (not v))) throw class this))
         ((eq? '< (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
-                                                                         (lambda (v2) (return (< v v2))) throw))
-                                                  throw))
+                                                                         (lambda (v2) (return (< v v2))) throw class this))
+                                                  throw class this))
         ((eq? '> (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
-                                                                         (lambda (v2) (return (> v v2))) throw))
-                                                  throw))
+                                                                         (lambda (v2) (return (> v v2))) throw class this))
+                                                  throw class this))
         ((eq? '<= (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
-                                                                         (lambda (v2) (return (<= v v2))) throw))
-                                                  throw))
+                                                                         (lambda (v2) (return (<= v v2))) throw class this))
+                                                  throw class this))
         ((eq? '>= (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
-                                                                         (lambda (v2) (return (>= v v2))) throw))
-                                                  throw))
+                                                                         (lambda (v2) (return (>= v v2))) throw class this))
+                                                  throw class this))
         ((eq? '== (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
-                                                                         (lambda (v2) (return (eq? v v2))) throw))
-                                                  throw))
+                                                                         (lambda (v2) (return (eq? v v2))) throw class this))
+                                                  throw class this))
         ((eq? '!= (operator expression)) (M_value (operand1 expression) state
                                                   (lambda (v) (M_value (operand2 expression) state
-                                                                         (lambda (v2) (return (not (eq? v v2)))) throw))
-                                                  throw))
+                                                                         (lambda (v2) (return (not (eq? v v2)))) throw class this))
+                                                  throw class this))
         (else (error 'unknown "unknown expression")))))
 
 (define M_value-new
-  (lambda (expression state return)
+  (lambda (expression state return class this)
     (cond
       ((not (eq? (operator expression) 'new)) (error 'error "No new operator."))
       (else (copyFields (lookup (className expression) state) (lambda (v) (return (cons (className expression) v))))))))
@@ -164,8 +164,8 @@
 
 ;M_value-return will take a return statement and return the statement right of "return"
 (define M_value-return
-  (lambda (expression state return throw)
-    (M_value (evaluatable expression) state (lambda (v) (return (convert_value v))) throw)))
+  (lambda (expression state return throw class this)
+    (M_value (evaluatable expression) state (lambda (v) (return (convert_value v))) throw class this)))
 
 (define evaluatable cadr)
 
@@ -181,26 +181,26 @@
 ;;;;;;;;;;;;;;;;;;;;;;; M_state section ;;;;;;;;;;;;;;;;;;
 ; lamnda (statement state return break continue throw)
 (define M_state
-  (lambda (statement state next break continue throw return)
+  (lambda (statement state next break continue throw return class this)
     (cond
       ((null? (operation statement)) (error 'error "Empty statement."))
-      ((eq? 'var (operation statement)) (M_state-declare statement state next throw))
-      ((eq? '= (operation statement)) (M_state-assign statement state next break continue throw return))
-      ((eq? 'try (operation statement)) (M_state-try statement state next break continue throw return))
-      ((eq? 'begin (operation statement)) (M_state-begin statement state next break continue throw return))
-      ((eq? 'throw (operation statement)) (M_state-throw statement state throw))
-      ((eq? 'break (operation statement)) (M_state-break statement state break))
-      ((eq? 'continue (operation statement)) (M_state-continue statement state continue))
-      ((eq? 'return (operation statement)) (M_value-return statement state return throw))
-      ((eq? 'if (operation statement)) (M_state-if statement state next break continue throw return))
-      ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw return))
-      ((eq? 'funcall (operation statement)) (M_state-funcall statement state next baseBreak baseContinue throw (lambda (v) (next state))))
-      ((eq? 'function (operation statement)) (M_state-function statement state next))
-      ((eq? 'class (operation statement)) (M_state-class statement state next))
+      ((eq? 'var (operation statement)) (M_state-declare statement state next throw class this))
+      ((eq? '= (operation statement)) (M_state-assign statement state next break continue throw return class this))
+      ((eq? 'try (operation statement)) (M_state-try statement state next break continue throw return class this))
+      ((eq? 'begin (operation statement)) (M_state-begin statement state next break continue throw return class this))
+      ((eq? 'throw (operation statement)) (M_state-throw statement state throw class this))
+      ((eq? 'break (operation statement)) (M_state-break statement state break class this))
+      ((eq? 'continue (operation statement)) (M_state-continue statement state continue class this))
+      ((eq? 'return (operation statement)) (M_value-return statement state return throw class this))
+      ((eq? 'if (operation statement)) (M_state-if statement state next break continue throw return class this))
+      ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw return class this))
+      ((eq? 'funcall (operation statement)) (M_state-funcall statement state next baseBreak baseContinue throw (lambda (v) (next state)) class this))
+      ((eq? 'function (operation statement)) (M_state-function statement state next class this))
+      ((eq? 'class (operation statement)) (M_state-class statement state next class this))
       (else (error 'error "Unrecognized statement type.")))))
 
 (define M_state-class
-  (lambda (statement state next)
+  (lambda (statement state next class this)
     (cond
       ((not (eq? (car statement) 'class)) (error 'error "Class definition without 'class' at beginning."))
       (else (declare_var (class-name statement) state (lambda (s) (buildClassBody (body statement) (lambda (s2) (update_state (class-name statement) s2 s (lambda (s3) (next s3)))))))))))                                                        
@@ -214,8 +214,8 @@
       ((eq? (firstElem body) '()) (buildClassBody (elemAfterSuper body) (lambda (v) (return (cons '() v)))))
       ((eq? (firstOperation body) 'extends) (buildClassBody (elemAfterSuper body) (lambda (v) (return (cons (superName body) v)))))
       ((and (eq? (firstOperation body) 'var) (not (null? (cddar body)))) (buildClassBody (remainingBody body) (lambda (v) (declare_var (fieldDecName body) (classVars v) (lambda (s) (update_state (fieldDecName body) (fieldDecVal body) s (lambda (s2) (return (cons s2 (funcVals v))))))))))
-      ((eq? (firstOperation body) 'function) (buildClassBody (remainingBody body) (lambda (v) (M_state-function (firstElem body) (fieldVals v) (lambda (s) (return (cons (classVars v) (list s))))))))
-      ((eq? (firstOperation body) 'static-function) (buildClassBody (remainingBody body) (lambda (v) (M_state-function (firstElem body) (fieldVals v) (lambda (s) (return (cons (classVars v) (list s)))))))))))
+      ((eq? (firstOperation body) 'function) (buildClassBody (remainingBody body) (lambda (v) (M_state-function (firstElem body) (fieldVals v) (lambda (s) (return (cons (classVars v) (list s)))) () ()))))
+      ((eq? (firstOperation body) 'static-function) (buildClassBody (remainingBody body) (lambda (v) (M_state-function (firstElem body) (fieldVals v) (lambda (s) (return (cons (classVars v) (list s)))) () ())))))))
 
 (define classVars car)
 
@@ -248,7 +248,7 @@
     (next (cons (restOfVariableFrames state) (list (restOfValueFrames state))))))
 
 (define M_state-begin
-  (lambda (statement state next break continue throw return)
+  (lambda (statement state next break continue throw return class this)
     (cond
       ((not (eq? (car statement) 'begin)) (error 'error "Begin block without 'begin' at the beginning."))
       (else (M_state-add-frame state (lambda (st) (M_state-block (cdr statement) st
@@ -256,10 +256,10 @@
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                  throw
-                                                                 return)))))))
+                                                                 return class this)))))))
 
 (define M_state-function
-  (lambda (statement state next)
+  (lambda (statement state next class this)
     (declare_var (var-name statement) state (lambda (s) (update_state (var-name statement) (var-value statement) s (lambda (s2) (next s2)))))))
 
 (define var-name cadr)
@@ -267,48 +267,54 @@
 (define var-value cddr)
 
 (define M_state-funcall
-  (lambda (statement state next break continue throw return)
+  (lambda (statement state next break continue throw return class this)
     (cond
       ((not (eq? (car statement) 'funcall)) (error 'error "Function evaluation without 'funcall' at the beginning."))
-      (else (M_value-arg-list (funcInputs statement) state throw
-                              (lambda (v) (GenEnvForFunc (funcName statement) state
-                                                         (lambda (s) (M_state-add-frame s (lambda (s2) (M_state-declare-func-vars v (funcArgs (lookup (funcName statement) s2)) s2
-                                                                                                (lambda (st) (M_state-block (funcStatements (lookup (funcName statement) st)) st
+      (else (M_object (cadr statement) state (lambda (oc) (M_value-arg-list (funcInputs statement) state throw
+                              (lambda (v) (GenEnvForFunc (funcName (cadr statement)) state
+                                                         (lambda (s) (M_state-add-frame s (lambda (s2) (M_state-declare-func-vars v (funcArgs (lookup (funcName (cadr statement)) (caddr (GetFuncClass (funcName (cadr statement)) (car oc) s2)))) s2
+                                                                                                (lambda (st) (M_state-block (funcStatements (lookup (funcName (cadr statement))
+                                                                                                                                                    (caddr (GetFuncClass (funcName (cadr statement)) (car oc) st)))) st
                                                                                                                             (lambda (s4) (next state))
                                                                                                                             baseBreak
                                                                                                                             baseContinue
                                                                                                                             throw
-                                                                                                                            return))
-                                                                                                throw)))))))))))
+                                                                                                                            return (GetFuncClassName (funcName (cadr statement)) (car oc) state) (cdr oc)))
+                                                                                                throw class this)))) class this)) class this)) throw class this)))))
 
 (define GenEnvForFunc
-  (lambda (name state next)
-    (if (contains? name (firstVariableFrame state))
-        (next state)
-        (GenEnvForFunc name (cons (restOfVariableFrames state) (list (restOfValueFrames state))) next))))
+  (lambda (name state next class this)
+    (cond
+      ((null? (cdar state)) (next state))
+      ((contains? name (firstVariableFrame state)) (next state))
+      (else (GenEnvForFunc name (cons (restOfVariableFrames state) (list (restOfValueFrames state))) next class this)))))
 
 (define M_value-arg-list
-  (lambda (inputs state throw cps)
+  (lambda (inputs state throw cps class this)
     (if (null? inputs)
         (cps '())
-        (M_value (firstInput inputs) state (lambda (v) (M_value-arg-list (remainingInputs inputs) state throw (lambda (v2) (cps (cons v v2))))) throw))))
+        (M_value (firstInput inputs) state (lambda (v) (M_value-arg-list (remainingInputs inputs) state throw (lambda (v2) (cps (cons v v2))) class this)) throw class this))))
 
 (define funcStatements cadr)
 
-(define funcName cadr)
+(define funcName
+  (lambda (func)
+    (cond
+      ((atom? func) func)
+      (else (caddr func)))))
 
 (define funcInputs cddr)
 
 (define funcArgs car)
 
 (define M_state-declare-func-vars
-  (lambda (inputs args state next throw)
+  (lambda (inputs args state next throw class this)
     (cond
       ((and (null? inputs) (null? args)) (next state))
       ((null? inputs) (error "Error: not enough inputs for function call."))
       ((null? args) (error "Error: more arguments than inputs for function call."))
       (else (M_state-declare (buildDeclare (firstArg args) (firstInput inputs)) state
-                             (lambda (s) (M_state-declare-func-vars (remainingInputs inputs) (remainingArgs args) s next throw)) throw)))))
+                             (lambda (s) (M_state-declare-func-vars (remainingInputs inputs) (remainingArgs args) s next throw class this)) throw class this)))))
 
 (define firstArg car)
 
@@ -319,29 +325,29 @@
 (define remainingArgs cdr)
 
 (define M_state-block
-  (lambda (statements state next break continue throw return)
+  (lambda (statements state next break continue throw return class this)
     (cond
       ((null? statements) (next state))
       (else (M_state (firstStatement statements) state
-                     (lambda (s) (M_state-block (remaining statements) s next break continue throw return))
-                     break continue throw return)))))
+                     (lambda (s) (M_state-block (remaining statements) s next break continue throw return class this))
+                     break continue throw return class this)))))
 
 (define M_state-throw
-  (lambda (statement state throw)
-    (M_value (throwVar statement) state (lambda (v) (throw v)) throw)))
+  (lambda (statement state throw class this)
+    (M_value (throwVar statement) state (lambda (v) (throw v)) throw class this)))
 
 (define M_state-break
-  (lambda (statement state break)
+  (lambda (statement state break class this)
     (break state)))
 
 (define M_state-continue
-  (lambda (statement state continue)
+  (lambda (statement state continue class this)
     (continue state)))
 
 (define throwVar cadr)
 
 (define M_state-try
-  (lambda (statement state next break continue throw return)
+  (lambda (statement state next break continue throw return class this)
     (cond
       ((null? (finallyBlock statement))
         (M_state-add-frame state (lambda (st) (M_state-try-catch (tryBlock statement) (catchBlock statement) st
@@ -349,14 +355,14 @@
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                  throw
-                                                                 return))))
+                                                                 return class this))))
       ((null? (catchList statement))
        (M_state-add-frame state (lambda (st) (M_state-try-finally (tryBlock statement) (finallyStatements statement) st
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                                  (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                                  throw
-                                                                 return)))) 
+                                                                 return class this)))) 
       (else
         (M_state-add-frame state (lambda (st) (M_state-try-catch-finally
                                                (tryBlock statement) (catchBlock statement) (finallyStatements statement) st
@@ -364,7 +370,7 @@
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
                                                (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
                                                throw
-                                               return)))))))
+                                               return class this)))))))
 
 (define catchList caddr)
 
@@ -379,18 +385,18 @@
 (define finallyBlock cadddr)
 
 (define M_state-try-catch
-  (lambda (try catch state next break continue throw return)
+  (lambda (try catch state next break continue throw return class this)
     (M_state-block try state next break continue
-                   (lambda (v) (M_state-catch catch v state next break continue throw return)) return)))
+                   (lambda (v) (M_state-catch catch v state next break continue throw return class this)) return class this)))
 
 (define M_state-catch
-  (lambda (catch value state next break continue throw return)
+  (lambda (catch value state next break continue throw return class this)
     (cond
       ((null? value) (error 'error "Null value was thrown."))
       (else (M_state-pop-frame state
                                (lambda (st) (M_state-add-frame st
                                                                (lambda (s) (M_state-declare (buildDeclare (varName catch) value) s
-                                                                                            (lambda (s2) (M_state-block (catchStatements catch) s2 next break continue throw return)) throw)))))))))
+                                                                                            (lambda (s2) (M_state-block (catchStatements catch) s2 next break continue throw return class this)) throw class this)))))))))
 
 (define catchStatements cadr)
       
@@ -402,77 +408,109 @@
 (define varName caar)
 
 (define M_state-try-catch-finally
-  (lambda (try catch finally state next break continue throw return)
+  (lambda (try catch finally state next break continue throw return class this)
     (M_state-block try state
-                   (lambda (s) (finally-next-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-break-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v) (finally-catch-throw-continuation catch v finally state next break continue throw return))
-                   return)))
+                   (lambda (s) (finally-next-continuation finally s next break continue throw return class this))
+                   (lambda (s) (finally-break-continuation finally s next break continue throw return class this))
+                   (lambda (s) (finally-continue-continuation finally s next break continue throw return class this))
+                   (lambda (v) (finally-catch-throw-continuation catch v finally state next break continue throw return class this))
+                   return class this)))
 
 (define M_state-try-finally
-  (lambda (try finally state next break continue throw return)
+  (lambda (try finally state next break continue throw return class this)
     (M_state-block try state
-                   (lambda (s) (finally-next-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-break-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v) (finally-throw-continuation finally state v next break continue throw return))
-                   return)))
+                   (lambda (s) (finally-next-continuation finally s next break continue throw return class this))
+                   (lambda (s) (finally-break-continuation finally s next break continue throw return class this))
+                   (lambda (s) (finally-continue-continuation finally s next break continue throw return class this))
+                   (lambda (v) (finally-throw-continuation finally state v next break continue throw return class this))
+                   return class this)))
 
 (define M_state-finally
-  (lambda (statements state next break continue throw return)
+  (lambda (statements state next break continue throw return class this)
     (M_state-pop-frame state
                        (lambda (st) (M_state-add-frame st
-                                                       (lambda (s) (M_state-block statements s next break continue throw return)))))))
+                                                       (lambda (s) (M_state-block statements s next break continue throw return class this)))))))
 
 (define finally-next-continuation
-  (lambda (finally state next break continue throw return)
-    (M_state-finally finally state (lambda (s) (next s)) break continue throw return)))
+  (lambda (finally state next break continue throw return class this)
+    (M_state-finally finally state (lambda (s) (next s)) break continue throw return class this)))
                
 (define finally-break-continuation
-  (lambda (finally state next break continue throw return)
-    (M_state-finally finally state (lambda (s) (break s)) break continue throw return)))
+  (lambda (finally state next break continue throw return class this)
+    (M_state-finally finally state (lambda (s) (break s)) break continue throw return class this)))
 
 (define finally-continue-continuation
-  (lambda (finally state next break continue throw return)
-    (M_state-finally finally state (lambda (s) (continue s)) break continue throw return)))
+  (lambda (finally state next break continue throw return class this)
+    (M_state-finally finally state (lambda (s) (continue s)) break continue throw return class this)))
 
 (define finally-throw-continuation
-  (lambda (finally state value next break continue throw return)
-    (M_state-finally finally state (lambda (s) (throw value)) break continue throw return)))
+  (lambda (finally state value next break continue throw return class this)
+    (M_state-finally finally state (lambda (s) (throw value)) break continue throw return class this)))
 
 (define finally-catch-throw-continuation
-  (lambda (catch value finally state next break continue throw return)
+  (lambda (catch value finally state next break continue throw return class this)
     (M_state-catch catch value state
-                   (lambda (s) (finally-next-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-break-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v) (M_state-finally finally state (lambda (s2) (throw v)) break continue throw return))
-                   (lambda (v) (finally-return-continuation finally state v next break continue throw return)))))
+                   (lambda (s) (finally-next-continuation finally s next break continue throw return class this))
+                   (lambda (s) (finally-break-continuation finally s next break continue throw return class this))
+                   (lambda (s) (finally-continue-continuation finally s next break continue throw return class this))
+                   (lambda (v) (M_state-finally finally state (lambda (s2) (throw v)) break continue throw return class this))
+                   (lambda (v) (finally-return-continuation finally state v next break continue throw return class this))
+                    class this)))
 
 (define finally-return-continuation
-  (lambda (finally state value next break continue throw return)
-    (M_state-finally finally state (lambda (s) (return value s)) break continue throw return)))
+  (lambda (finally state value next break continue throw return class this)
+    (M_state-finally finally state (lambda (s) (return value s)) break continue throw return class this)))
 
 (define M_state-while
-  (lambda (statement state next break continue throw return)
+  (lambda (statement state next break continue throw return class this)
     (M_value (GetCondition statement) state (lambda (v) (if v
                                                             (M_state (GetStatement statement) state
-                                                                     (lambda (s) (M_state-while statement s next break continue throw return))
+                                                                     (lambda (s) (M_state-while statement s next break continue throw return class this))
                                                                      (lambda (s) (next s))
-                                                                     (lambda (s) (M_state-while statement s next break continue throw return))
+                                                                     (lambda (s) (M_state-while statement s next break continue throw return class this))
                                                                      throw
-                                                                     return)
-                                                            (next state))) throw)))
+                                                                     return class this)
+                                                            (next state))) throw class this)))
 
 (define GetStatement caddr)
 
 (define M_state-if
-  (lambda (statement state next break continue throw return)
+  (lambda (statement state next break continue throw return class this)
     (cond
-      ((M_value (GetCondition statement) state (lambda (v) v) throw) (M_state (GetThenStatement statement) state next break continue throw return))
-      ((not (null? (GetOptElse statement))) (M_state (GetOptElse statement) state next break continue throw return))
+      ((M_value (GetCondition statement) state (lambda (v) v) throw class this) (M_state (GetThenStatement statement) state next break continue throw return class this))
+      ((not (null? (GetOptElse statement))) (M_state (GetOptElse statement) state next break continue throw return class this))
       (else (next state)))))
+
+(define M_object
+  (lambda (objexp state return throw class this)
+    (cond
+      ((eq? objexp 'super) (M_object-super objexp state return throw class this))
+      ((eq? objexp 'this) (return (cons class this)))
+      ((not (pair? objexp)) (return (cons class this)))
+      (else (M_value (cadr objexp) state (lambda (v) (if (obj? v)
+                                                  (return (cons (car v) v))
+                                                  (error 'error "Function call on non-object.")))
+                     throw class this)))))
+
+(define obj?
+  (lambda (obj)
+    (cond
+      ((not (pair? obj)) #f)
+      (else #t))))
+
+(define GetFuncClass
+  (lambda (f class state)
+    (cond
+      ((null? class) (error 'error "Function not defined."))
+      ((contains? f (car (caaddr (lookup class state)))) (lookup class state))
+      (else (GetFuncClass f (car (lookup class state)) state)))))
+
+(define GetFuncClassName
+  (lambda (f class state)
+    (cond
+      ((null? class) (error 'error "Function not defined."))
+      ((contains? f (car (caaddr (lookup class state)))) class)
+      (else (GetFuncClass f (car (lookup class state)) state)))))
 
 ;Helper for if statement to get the first condition
 (define GetCondition cadr)
@@ -493,12 +531,12 @@
 
 ;M_declare_statement will take a list starting with 'var followed by an atom with an optional value
 (define M_state-declare
-  (lambda (statement state next throw)
+  (lambda (statement state next throw class this)
     (cond
       ((not (eq? 'var (operation statement))) (error 'illegal "Declaration statment does not start with 'var'"))
       ((null? (declare-value-list statement)) (declare_var (declare-var-name statement) state (lambda (s) (next s))))
       (else (declare_var (declare-var-name statement) state (lambda (s) (M_value (declare-val statement) s
-                                                                                 (lambda (v) (update_state (declare-var-name statement) v s (lambda (s2) (next s2)))) throw)))))))
+                                                                                 (lambda (v) (update_state (declare-var-name statement) v s (lambda (s2) (next s2)))) throw class this)))))))
 
 (define declare-value-list cddr)
 
@@ -508,11 +546,11 @@
 
 ; M_assign takes a statement and state and updates the state with the desired variable assignment.
 (define M_state-assign
-  (lambda (statement state next break continue throw return)
+  (lambda (statement state next break continue throw return class this)
     (cond
       ((not (eq? '= (operation statement))) (error 'illegal "Assignment statement does not start with '='"))
       (else (M_value (assign-expression statement) state
-                     (lambda (v) (update_state (assign-var statement) v state (lambda (s2) (next s2)))) throw)))))
+                     (lambda (v) (update_state (assign-var statement) v state (lambda (s2) (next s2)))) throw class this)))))
 
 (define operation car)
 
