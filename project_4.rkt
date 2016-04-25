@@ -2,14 +2,6 @@
 ;David Bauer dmb172
 ;Ryan Nowacoski rmn36
 
-;Class defs in base level of state
-;Class declaration ({super/()} (((varnames)) ((varvals))) (((funcnames)) ((funcvals))))
-;Instance format   (class (vars in reverse order))
-
-;For looking up fields, use the number of elements from the end to find the var in the instance
-; for example Class A has fields (a b) with initial values (1 2) they're stored in an instance as
-; (2 1) so b is 0 from the end so it is the element at the 0 index in the instance... Will probably need helper functions
-
 ;Load the parser
 (load "classParser.scm")
 
@@ -71,7 +63,11 @@
 
 (define M_field-lookup
   (lambda (f state class this return)
-    (return (GetIndex f (caaadr (lookup class state)) (lambda (v) (GetVal (cadr this) v))))))
+    (return (GetIndex f (fieldList (lookup class state)) (lambda (v) (GetVal (instFieldVals this) v))))))
+
+(define fieldList caaadr)
+
+(define instFieldVals cadr)
 
 (define GetIndex
   (lambda (f vars return)
@@ -253,14 +249,22 @@
 
 (define AppendFields
   (lambda (super class)
-    (cons (car class) (cons (mergefields (cadr super) (cadr class)) (list (caddr class))))))
+    (cons (car class) (cons (mergefields (objFields super) (objFields class)) (list (objMethods class))))))
+
+(define objFields cadr)
+
+(define objMethods caddr)
 
 (define mergefields
   (lambda (sf cf)
     (cond
-      ((null? (caar sf)) cf)
-      ((null? (caar cf)) sf)
-      (else (cons (list (append (caar cf) (caar sf))) (list (list (append (caadr cf) (caadr sf)))))))))
+      ((null? (objFieldNames sf)) cf)
+      ((null? (objFieldNames cf)) sf)
+      (else (cons (list (append (objFieldNames cf) (objFieldNames sf))) (list (list (append (objFieldVals cf) (objFieldVals sf)))))))))
+
+(define objFieldNames caar)
+
+(define objFieldVals caadr)
 
 (define body cddr)
 
@@ -648,7 +652,7 @@
   (lambda (statement state next break continue throw return class this)
     (if (list? (assign-var statement))
         (M_object (assign-var statement) state (lambda (oc) (M_value (assign-expression statement) state
-                                                                     (lambda (v) (M_field-assign (caddr (assign-var statement))
+                                                                     (lambda (v) (M_field-assign (dotVarName (assign-var statement))
                                                                                                  v
                                                                                                  state next break continue
                                                                                                  throw return (car oc) (cdr oc)))
@@ -661,6 +665,8 @@
                                                                                                  throw return (car oc) (cdr oc)))
                                                                      throw class this))
                   throw class this))))
+
+(define dotVarName caddr)
   
 
 (define M_field-assign
