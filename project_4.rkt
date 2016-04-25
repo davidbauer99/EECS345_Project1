@@ -53,11 +53,45 @@
       ((boolean? expression) (return expression))
       ((eq? 'true expression) (return #t))
       ((eq? 'false expression) (return #f))
-      ((atom? expression) (return (lookup expression state))) 
+      ((atom? expression) (M_lookup expression state class this return))
       ((member (operator expression) '(+ - * / %)) (M_value-arith expression state return throw class this))
       ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state return throw class this))
       ((eq? (operator expression) 'funcall) (M_value-funcall expression state return throw class this))
-      ((eq? (operator expression) 'new) (M_value-new expression state return class this)))))
+      ((eq? (operator expression) 'new) (M_value-new expression state return class this))
+      ((eq? (operator expression) 'dot) (M_object expression state (lambda (oc)
+                                                                     (M_field-lookup (caddr expression) state (car oc) (cdr oc) return))
+                                                  throw class this))
+      ((obj? expression) (return expression)))))
+
+(define M_lookup
+  (lambda (exp state class this return)
+    (cond
+      ((null? (lookup exp state)) (M_field-lookup exp state class this return))
+      (else (return (lookup exp state))))))
+
+(define M_field-lookup
+  (lambda (f state class this return)
+    (return (GetIndex f (caaadr (lookup class state)) (lambda (v) (GetVal (cadr this) v))))))
+
+(define GetIndex
+  (lambda (f vars return)
+    (cond
+      ((null? vars) (error 'error "Variable not found"))
+      ((eq? (car vars) f) (return (len (cdr vars))))
+      (else (GetIndex f (cdr vars) return)))))
+
+(define len
+  (lambda (l)
+    (if (null? l)
+        0
+        (+ 1 (length (cdr l))))))
+
+(define GetVal
+  (lambda (vals i)
+    (cond
+      ((null? vals) (error 'error "Variable not found."))
+      ((zero? i) (unbox (car vals)))
+      (else (GetVal (cdr vals) (- i 1))))))
 
 (define M_value-funcall
   (lambda (expression state return throw class this)
@@ -145,7 +179,6 @@
   (lambda (class return)
     (cond
       ((null? class) (error 'error "No class def found."))
-      ((not (null? (superType class))) ) ;TODO
       (else (copyOf (classFieldList class) (lambda (v) (return v)))))))
 
 (define classFieldList
@@ -509,6 +542,12 @@
                                                   (error 'error "Function call on non-object.")))
                      throw class this)))))
 
+(define M_object-super
+  (lambda (objexp state return throw class this)
+    (if (null? (car (lookup class state)))
+        (error 'error "Class has no super.")
+        (return (cons (car (lookup class state)) this)))))
+
 (define obj cadr)
 
 (define classFromInst car)
@@ -576,8 +615,32 @@
   (lambda (statement state next break continue throw return class this)
     (cond
       ((not (eq? '= (operation statement))) (error 'illegal "Assignment statement does not start with '='"))
+      ((null? (lookup (assign-var statement) state)) (M_state-field-assign statement state next break continue throw return class this)) 
       (else (M_value (assign-expression statement) state
                      (lambda (v) (update_state (assign-var statement) v state (lambda (s2) (next s2)))) throw class this)))))
+
+(define M_state-field-assign
+  (lambda (statement state next break continue throw return class this)
+    (M_object (assign-var statement) state (lambda (oc) (M_value (assign-expression statement) state
+                                                                 (lambda (v) (M_field-assign (caddr (assign-var statement))
+                                                                        v
+                                                                        state next break continue
+                                                                        throw return (car oc) (cdr oc)))
+                                                                 throw class this))
+              throw class this)))
+
+(define M_field-assign
+  (lambda (f val state next break continue throw return class this)
+    (begin (GetIndex f (caaadr (lookup class state)) (lambda (v) (UpdateVal val (cadr this) v))) (next state))))
+
+(define UpdateVal
+  (lambda (v vars i)
+    (cond
+      ((null? vars) (error 'error "Variable not found."))
+      ((zero? i) (set-box! (car vars) v))
+      (else (UpdateVal v vars (- i 1))))))
+
+;(GetIndex f (caaadr (lookup class state)) (lambda (v) (GetVal (cadr this) v))
 
 (define operation car)
 
@@ -590,7 +653,7 @@
   (lambda (name state)
     (cond
       ((null? state) 'undefined)
-      ((empty?  (variables state)) (error 'error "Using variable before it is assigned."))
+      ((empty?  (variables state)) ())
       ((empty?  (firstVariableFrame state)) (lookup name (cons (remaining_variables state) (list (remaining_values state)))))
       ((and (eq? name (first_variable state)) (eq? 'undefined (unbox (first_value state)))) (error 'error "Using variable before it is assigned."))
       ((eq? name (first_variable state)) (unbox (first_value state)))
