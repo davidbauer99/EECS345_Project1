@@ -114,7 +114,7 @@
                                           (M_value (operand1 expression) state (lambda (v1) (M_value (operand2 expression) state
                                                                                                       (lambda (v2) (return (- v1 v2)))
                                                                                                       throw class this))
-                                                   throw)
+                                                   throw class this)
                                           (M_value (operand1 expression) state (lambda (v) (return (- 0 v))) throw class this)))
       ((eq? '* (operator expression)) (M_value (operand1 expression) state
                                                (lambda (v1) (M_value (operand2 expression) state (lambda (v2) (return (* v1 v2))) throw class this))
@@ -241,7 +241,26 @@
   (lambda (statement state next class this)
     (cond
       ((not (eq? (car statement) 'class)) (error 'error "Class definition without 'class' at beginning."))
-      (else (declare_var (class-name statement) state (lambda (s) (buildClassBody (body statement) (lambda (s2) (update_state (class-name statement) s2 s (lambda (s3) (next s3)))))))))))                                                        
+      (else (declare_var (class-name statement) state (lambda (s) (buildClassBody (body statement) (lambda (s2) (AddSuperFields (class-name statement)
+                                                                                                                               s2 state
+                                                                                                                               (lambda (s3) (update_state (class-name statement) s3 s (lambda (s4) (next s4)))))))))))))
+
+(define AddSuperFields
+  (lambda (cname class state return)
+    (cond
+      ((null? (car class)) (return class))
+      (else (return (AppendFields (lookup (car class) state) class))))))
+
+(define AppendFields
+  (lambda (super class)
+    (cons (car class) (cons (mergefields (cadr super) (cadr class)) (list (caddr class))))))
+
+(define mergefields
+  (lambda (sf cf)
+    (cond
+      ((null? (caar sf)) cf)
+      ((null? (caar cf)) sf)
+      (else (cons (list (append (caar cf) (caar sf))) (list (list (append (caadr cf) (caadr sf)))))))))
 
 (define body cddr)
 
@@ -252,6 +271,7 @@
       ((eq? (firstElem body) '()) (buildClassBody (elemAfterSuper body) (lambda (v) (return (cons '() v)))))
       ((eq? (firstOperation body) 'extends) (buildClassBody (elemAfterSuper body) (lambda (v) (return (cons (superName body) v)))))
       ((and (eq? (firstOperation body) 'var) (not (null? (cddar body)))) (buildClassBody (remainingBody body) (lambda (v) (declare_var (fieldDecName body) (classVars v) (lambda (s) (update_state (fieldDecName body) (fieldDecVal body) s (lambda (s2) (return (cons s2 (funcVals v))))))))))
+      ((eq? (firstOperation body) 'var) (buildClassBody (remainingBody body) (lambda (v) (declare_var (fieldDecName body) (classVars v) (lambda (s) (return (cons s (funcVals v))))))))
       ((eq? (firstOperation body) 'function) (buildClassBody (remainingBody body) (lambda (v) (M_state-function (firstElem body) (fieldVals v) (lambda (s) (return (cons (classVars v) (list s)))) () ()))))
       ((eq? (firstOperation body) 'static-function) (buildClassBody (remainingBody body) (lambda (v) (M_state-function (firstElem body) (fieldVals v) (lambda (s) (return (cons (classVars v) (list s)))) () ())))))))
 
@@ -526,8 +546,13 @@
 
 (define M_state-if
   (lambda (statement state next break continue throw return class this)
+    (M_value (GetCondition statement) state (lambda (v) (if (eq? v 'true)
+                                                            (M_state (GetThenStatement statement) state next break continue throw return class this)
+                                                            (M_state-else statement state next break continue throw return class this))) throw class this)))
+
+(define M_state-else
+  (lambda (statement state next break continue throw return class this)  
     (cond
-      ((M_value (GetCondition statement) state (lambda (v) v) throw class this) (M_state (GetThenStatement statement) state next break continue throw return class this))
       ((not (null? (GetOptElse statement))) (M_state (GetOptElse statement) state next break continue throw return class this))
       (else (next state)))))
 
@@ -576,7 +601,7 @@
     (cond
       ((null? class) (error 'error "Function not defined."))
       ((contains? f (classFuncFrame (classFuncState (lookup class state)))) class)
-      (else (GetFuncClass f (superTypeName (lookup class state)) state)))))
+      (else (GetFuncClassName f (superTypeName (lookup class state)) state)))))
 
 ;Helper for if statement to get the first condition
 (define GetCondition cadr)
@@ -621,13 +646,22 @@
 
 (define M_state-field-assign
   (lambda (statement state next break continue throw return class this)
-    (M_object (assign-var statement) state (lambda (oc) (M_value (assign-expression statement) state
-                                                                 (lambda (v) (M_field-assign (caddr (assign-var statement))
-                                                                        v
-                                                                        state next break continue
-                                                                        throw return (car oc) (cdr oc)))
-                                                                 throw class this))
-              throw class this)))
+    (if (list? (assign-var statement))
+        (M_object (assign-var statement) state (lambda (oc) (M_value (assign-expression statement) state
+                                                                     (lambda (v) (M_field-assign (caddr (assign-var statement))
+                                                                                                 v
+                                                                                                 state next break continue
+                                                                                                 throw return (car oc) (cdr oc)))
+                                                                     throw class this))
+                  throw class this)
+        (M_object (assign-var statement) state (lambda (oc) (M_value (assign-expression statement) state
+                                                                     (lambda (v) (M_field-assign (assign-var statement)
+                                                                                                 v
+                                                                                                 state next break continue
+                                                                                                 throw return (car oc) (cdr oc)))
+                                                                     throw class this))
+                  throw class this))))
+  
 
 (define M_field-assign
   (lambda (f val state next break continue throw return class this)
@@ -638,7 +672,7 @@
     (cond
       ((null? vars) (error 'error "Variable not found."))
       ((zero? i) (set-box! (car vars) v))
-      (else (UpdateVal v vars (- i 1))))))
+      (else (UpdateVal v (cdr vars) (- i 1))))))
 
 ;(GetIndex f (caaadr (lookup class state)) (lambda (v) (GetVal (cadr this) v))
 
